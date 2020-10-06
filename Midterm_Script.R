@@ -1,5 +1,5 @@
 
-#Setup
+##### SETUP #####
 install.packages("geosphere")
 library(tidyverse)
 library(sf)
@@ -90,7 +90,7 @@ nn_function <- function(measureFrom,measureTo,k) {
   return(output)  
 }
 
-###DATA WRANGLING
+##### DATA WRANGLING & BUILDING FEATURES #####
 
 #Read in Property Data (note that these are centroids, may need to convert to points for some analyses)
 MiamiProperties <-
@@ -99,9 +99,27 @@ MiamiProperties <-
 mapview::mapview(MiamiProperties)
 st_crs(MiamiProperties)
 
-#Build Features. Initial ideas: distance to coastline, exposure to crime (assaults?), neighborhood, living area, age, house style
-#How many of these are already contained in the dataset vs. we need to find ourselves?
+#Build Features. Initial ideas: 
 
+##AVAILABLE IN UNDERLYING DATA
+  #neighborhood - I think Ken mentioned that he hasn't been able to find a neighborhood file for Miami, could we use zipcode as proxy (Mailing.Zip field)?
+  #Lot size (LotSize field)  
+  #living area (LivingSqFt field, Bed field, Bath field, Stories field? Select one I think)
+  #age (based on the YearBuilt field)
+  #house style (not sure this is available)
+  #Extra feature codes (fields XF1, XF2, XF3; see metadata spreadsheet. Should we do something with these?)
+  #Zoning (Zoning field)
+  #the metadata spreadsheet also indicated there are fields for subareas and buidling element types, but I'm having a hard time locating those within the data
+
+##TO FIND USING OPEN DATA - need to brainstorm this more, some intial ideas below
+  #distance to coastline (I computed this and added the CoastDist field)
+  #exposure to crime (assaults? these data are hard to find. jail bookings? https://gis-mdc.opendata.arcgis.com/datasets/jail-bookings-may-29-2015-to-current)
+  #distance to airport? available in OSM
+  #Education (e.g., distance to nearest school?) available in OSM
+  #Number of restaurants/bars nearby? Available in OSM
+  #number of libraries nearby? Available in OSM
+  #nearby parks/green space? 
+  #number of retail/general commercial areas nearby (could be more specific like grocery stores?)
 
 #OSM Data
 miami.base <- 
@@ -134,3 +152,8 @@ MiamiProperties <-
 
 hist(MiamiProperties$CoastDist)
 #values less than zero? or just weirdness with the plot
+
+
+###### BUILD REGRESSION MODELS ######
+
+#do we split the data into the training test and the test set before or after we build our regression models?
