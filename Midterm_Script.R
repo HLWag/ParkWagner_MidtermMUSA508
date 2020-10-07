@@ -94,7 +94,8 @@ nn_function <- function(measureFrom,measureTo,k) {
 
 #Read in Property Data (note that these are centroids, may need to convert to points for some analyses)
 MiamiProperties <-
-  st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")
+  st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")  
+  ## for DP: "/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson"
   #st_transform('ESRI:102658')
 mapview::mapview(MiamiProperties)
 st_crs(MiamiProperties)
@@ -152,6 +153,24 @@ MiamiProperties <-
 
 hist(MiamiProperties$CoastDist)
 #values less than zero? or just weirdness with the plot
+
+#elementary school point data (2015 data)
+Miami.elementary.point <-
+st_read("https://opendata.arcgis.com/datasets/d3db0fce650d4e40a5949b0acae6fe3a_0.geojson") %>%
+filter(CITY == "Miami" | CITY == "Miami Beach")
+
+mapview::mapview(Miami.elementary.point)
+st_crs(Miami.elementary.point)
+
+#elemantary school boudaries (2018 data)
+
+Miami.elementary.boudnary <-
+  st_read("https://opendata.arcgis.com/datasets/19f5d8dcd9714e6fbd9043ac7a50c6f6_0.geojson") %>%
+  filter(CITY == "Miami" | CITY == "Miami Beach")
+
+mapview::mapview(Miami.elementary.point)
+st_crs(Miami.elementary.point)
+## will need to ggplot this data
 
 
 ###### BUILD REGRESSION MODELS ######
