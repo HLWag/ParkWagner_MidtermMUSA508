@@ -208,7 +208,46 @@ Miami.sexualoffenders <-
   filter(CITY == "Miami" | CITY == "Miami Beach")
 
 mapview::mapview(Miami.sexualoffenders)
-st_crs(Miami.sexualoffenders)  
+st_crs(Miami.sexualoffenders) 
+
+
+
+MiamiProperties$sexualoffenders_buffer =
+  st_buffer(MiamiProperties, 660) %>% 
+  aggregate(mutate(Miami.sexualoffenders, counter = 1),., sum) %>%
+  pull(counter)
+
+ggplot() + geom_sf(data = miami.base, fill = "grey40") +
+  stat_density2d(data = data.frame(st_coordinates(Miami.sexualoffenders)), 
+                 aes(X, Y, fill = ..level.., alpha = ..level..),
+                 size = 0.01, bins = 40, geom = 'polygon') +
+  scale_fill_gradient(low = "#25CB10", high = "#FA7800", name = "Density") +
+  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
+  labs(title = "Density of Aggravated Assaults, Boston") +
+  mapTheme()
+
+## Nearest Neighbor Feature
+st_c <- st_coordinates
+
+MiamiProperties <-
+  MiamiProperties %>% 
+  mutate(
+    crime_nn1= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Miami.sexualoffenders),1),
+    crime_nn2= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Miami.sexualoffenders),2),
+    crime_nn3= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Miami.sexualoffenders),3),
+    crime_nn4= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Miami.sexualoffenders),4),
+    crime_nn5= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Miami.sexualoffenders),5))
+
+## Plot NN count over space - Should increase or decrease?
+MiamiProperties.plot <- MiamiProperties %>% 
+  st_drop_geometry() %>% 
+  dplyr::select(Folio, starts_with("crime_")) %>% 
+  tidyr::pivot_longer(cols = -Folio, names_to = "crime_nn")
+
+ggplot(MiamiProperties.plot, aes(x = crime_nn, y = value, group = Folio)) +
+  geom_line(alpha = 0.05, color = "royalblue1") +
+  theme_bw()
+
 
 
 ###### BUILD REGRESSION MODELS ######
