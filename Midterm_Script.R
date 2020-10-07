@@ -94,11 +94,15 @@ nn_function <- function(measureFrom,measureTo,k) {
 
 #Read in Property Data (note that these are centroids, may need to convert to points for some analyses)
 MiamiProperties <-
+
   st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")  
   ## for DP: "/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson"
   #st_transform('ESRI:102658')
+  st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson") 
+
+st_crs(MiamiProperties) #note that I'm keeping this in the default WGS84 until I finish the CoastDist calculations
+
 mapview::mapview(MiamiProperties)
-st_crs(MiamiProperties)
 
 #Build Features. Initial ideas: 
 
@@ -137,7 +141,7 @@ ggplot() +
   geom_sf(data=miami.base, fill="black") +
   geom_sf(data=st_as_sfc(st_bbox(miami.base)), colour="red", fill=NA) 
 
-#Distance to Coastline 
+###Distance to Coastline (this calculation has to be in WGS84)
 Coastline<-opq(bbox = c(xmin, ymin, xmax, ymax)) %>% 
   add_osm_feature("natural", "coastline") %>%
   osmdata_sf()
@@ -145,15 +149,23 @@ Coastline<-opq(bbox = c(xmin, ymin, xmax, ymax)) %>%
 #test in meters
 dist<-geosphere::dist2Line(p=st_coordinates(st_centroid(MiamiProperties)),
                                             line=st_coordinates(Coastline$osm_lines)[,1:2])
+
 #add to MiamiProperties and convert to miles
 MiamiProperties <-
-  MiamiProperties %>%  
-  mutate(CoastDist=geosphere::dist2Line(p=st_coordinates(st_centroid(MiamiProperties)),
-                                        line=st_coordinates(Coastline$osm_lines)[,1:2])*0.00062137)
+  MiamiProperties %>%
+  mutate(CoastDist=(geosphere::dist2Line(p=st_coordinates(st_centroid(MiamiProperties)),
+                                        line=st_coordinates(Coastline$osm_lines)[,1:2])*0.00062137)[,1])
 
-hist(MiamiProperties$CoastDist) #values less than zero? or just weirdness with the plot
+hist(MiamiProperties$CoastDist)
 
-#Bars, pubs, and restaurants
+
+
+#Convert Miami Data to Local Projection #st_transform('ESRI:102658')
+MiamiProperties<-
+  MiamiProperties%>%
+  st_transform('ESRI:102658')
+
+###Bars, pubs, and restaurants
 bars<-opq(bbox = c(xmin, ymin, xmax, ymax)) %>% 
   add_osm_feature(key = 'amenity', value = c("bar", "pub", "restaurant")) %>%
   osmdata_sf()
@@ -162,17 +174,21 @@ bars<-
   bars$osm_points%>%
   .[miami.base,]
 
+bars<-
+  bars%>%
+  st_transform('ESRI:102658')
+
 ggplot()+
   geom_sf(data=miami.base, fill="black")+
   geom_sf(data=bars, colour="red", size=1)
   
 MiamiProperties<-
-  MiamiProperties %>% 
+  MiamiProperties %>%
   mutate(
     bars_nn1= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),1),
     bars_nn2= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),2),
     bars_nn3= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),3),
-    basr_nn4= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),4),
+    bars_nn4= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),4),
     bars_nn5= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),5))
 
 #elementary school point data (2015 data)
@@ -211,6 +227,61 @@ mapview::mapview(Miami.sexualoffenders)
 st_crs(Miami.sexualoffenders)  
 
 
+#Park Facilities
+Parks<-st_read("https://opendata.arcgis.com/datasets/8c9528d3e1824db3b14ed53188a46291_0.geojson")%>%
+st_transform('ESRI:102658')
+mapview::mapview(Parks)
+
+MiamiProperties<-
+  MiamiProperties %>% 
+  mutate(
+    parks_nn1= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Parks),1),
+    parks_nn2= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Parks),2),
+    parks_nn3= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Parks),3),
+    parks_nn4= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Parks),4),
+    parks_nn5= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Parks),5))
+
+
+
+
+
+
 ###### BUILD REGRESSION MODELS ######
 
 #do we split the data into the training test and the test set before or after we build our regression models?
+
+reg1 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, Bed, Bath, Stories, YearBuilt, LivingSqFt, Mailing.Zip, bars_nn5, CoastDist, parks_nn5))
+summ(reg1)
+summary(reg1)
+
+
+
+
+
+##### CORRELATION #####
+#Price as a function of continuous variables
+st_drop_geometry(MiamiProperties) %>% 
+  mutate(Age = 2020 - YearBuilt) %>%
+  dplyr::select(SalePrice, LivingSqFt, Age) %>%
+  filter(SalePrice <= 1000000, Age < 500) %>%
+  gather(Variable, Value, -SalePrice) %>% 
+  ggplot(aes(Value, SalePrice)) +
+  geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~Variable, ncol = 3, scales = "free") +
+  labs(title = "Price as a function of continuous variables") +
+  plotTheme()
+
+#Price as a function of categorical variables
+
+#Correlation across numeric variables
+numericVars <- 
+  select_if(st_drop_geometry(MiamiProperties), is.numeric) %>% na.omit()
+
+ggcorrplot(
+  round(cor(numericVars), 1), 
+  p.mat = cor_pmat(numericVars),
+  colors = c("#25CB10", "white", "#FA7800"),
+  type="lower",
+  insig = "blank") +  
+  labs(title = "Correlation across numeric variables") 
