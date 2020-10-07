@@ -109,13 +109,13 @@ st_crs(MiamiProperties)
   #house style (not sure this is available)
   #Extra feature codes (fields XF1, XF2, XF3; see metadata spreadsheet. Should we do something with these?)
   #Zoning (Zoning field)
-  #the metadata spreadsheet also indicated there are fields for subareas and buidling element types, but I'm having a hard time locating those within the data
+  #the metadata spreadsheet also indicated there are fields for subareas and building element types, but I'm having a hard time locating those within the data
 
-##TO FIND USING OPEN DATA - need to brainstorm this more, some intial ideas below
+##TO FIND USING OPEN DATA - need to brainstorm this more, some initial ideas below
   #distance to coastline (I computed this and added the CoastDist field)
-  #exposure to crime (assaults? these data are hard to find. jail bookings? https://gis-mdc.opendata.arcgis.com/datasets/jail-bookings-may-29-2015-to-current)
+  #exposure to crime (assaults? these data are hard to find. jail bookings? https://gis-mdc.opendata.arcgis.com/datasets/jail-bookings-may-29-2015-to-current  )
   #distance to airport? available in OSM
-  #Education (e.g., distance to nearest school?) available in OSM
+  #Education (e.g., distance to nearest school?) available in OSM; school zone? - look into this?
   #Number of restaurants/bars nearby? Available in OSM
   #number of libraries nearby? Available in OSM
   #nearby parks/green space? 
@@ -136,7 +136,7 @@ ggplot() +
   geom_sf(data=miami.base, fill="black") +
   geom_sf(data=st_as_sfc(st_bbox(miami.base)), colour="red", fill=NA) 
 
-#Distance to Coastline Calculation 
+#Distance to Coastline 
 Coastline<-opq(bbox = c(xmin, ymin, xmax, ymax)) %>% 
   add_osm_feature("natural", "coastline") %>%
   osmdata_sf()
@@ -144,14 +144,35 @@ Coastline<-opq(bbox = c(xmin, ymin, xmax, ymax)) %>%
 #test in meters
 dist<-geosphere::dist2Line(p=st_coordinates(st_centroid(MiamiProperties)),
                                             line=st_coordinates(Coastline$osm_lines)[,1:2])
-#add to MiamiProperties and Convert to miles
+#add to MiamiProperties and convert to miles
 MiamiProperties <-
   MiamiProperties %>%  
   mutate(CoastDist=geosphere::dist2Line(p=st_coordinates(st_centroid(MiamiProperties)),
                                         line=st_coordinates(Coastline$osm_lines)[,1:2])*0.00062137)
 
-hist(MiamiProperties$CoastDist)
-#values less than zero? or just weirdness with the plot
+hist(MiamiProperties$CoastDist) #values less than zero? or just weirdness with the plot
+
+#Bars, pubs, and restaurants
+bars<-opq(bbox = c(xmin, ymin, xmax, ymax)) %>% 
+  add_osm_feature(key = 'amenity', value = c("bar", "pub", "restaurant")) %>%
+  osmdata_sf()
+
+bars<-
+  bars$osm_points%>%
+  .[miami.base,]
+
+ggplot()+
+  geom_sf(data=miami.base, fill="black")+
+  geom_sf(data=bars, colour="red", size=1)
+  
+MiamiProperties<-
+  MiamiProperties %>% 
+  mutate(
+    bars_nn1= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),1),
+    bars_nn2= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),2),
+    bars_nn3= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),3),
+    basr_nn4= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),4),
+    bars_nn5= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),5))
 
 
 ###### BUILD REGRESSION MODELS ######
