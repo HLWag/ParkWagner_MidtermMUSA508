@@ -194,6 +194,23 @@ st_crs(Miami.elementary.point)
 ## will need to ggplot this data
 
 
+#park facilities
+Miami.parks <-  
+  st_read("https://opendata.arcgis.com/datasets/8c9528d3e1824db3b14ed53188a46291_0.geojson") %>%
+  filter(CITY == "Miami" | CITY == "Miami Beach")
+  
+mapview::mapview(Miami.parks)
+st_crs(Miami.parks)  
+
+#Crime- Sexual Offenders and Predators within Miami-Dade County point data 
+Miami.sexualoffenders <-  
+  st_read("https://opendata.arcgis.com/datasets/f8759d722aeb4198bfe7c4ad780604d2_0.geojson") %>%
+  filter(CITY == "Miami" | CITY == "Miami Beach")
+
+mapview::mapview(Miami.sexualoffenders)
+st_crs(Miami.sexualoffenders)  
+
+
 ###### BUILD REGRESSION MODELS ######
 
 #do we split the data into the training test and the test set before or after we build our regression models?
