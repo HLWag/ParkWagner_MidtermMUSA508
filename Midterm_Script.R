@@ -92,17 +92,39 @@ nn_function <- function(measureFrom,measureTo,k) {
 
 ##### DATA WRANGLING & BUILDING FEATURES #####
 
-#Read in Property Data (note that these are centroids, may need to convert to points for some analyses)
+# Loading Miami base map from OSM Data
+miami.base <- 
+  st_read("https://opendata.arcgis.com/datasets/5ece0745e24b4617a49f2e098df8117f_0.geojson") %>%
+  filter(NAME == "MIAMI BEACH" | NAME == "MIAMI") %>%
+  st_union()
+
+xmin = st_bbox(miami.base)[[1]]
+ymin = st_bbox(miami.base)[[2]]
+xmax = st_bbox(miami.base)[[3]]  
+ymax = st_bbox(miami.base)[[4]]
+
+ggplot() +
+  geom_sf(data=miami.base, fill="gray30") +
+  geom_sf(data=st_as_sfc(st_bbox(miami.base)), colour="red", fill=NA) 
+
+# Read in Property Data (note that these are centroids, may need to convert to points for some analyses)
 MiamiProperties <-
 
   st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")  
-  ## for DP: "/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson"
+  ## for DP: st_read("/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson")
   #st_transform('ESRI:102658')
-  st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson") 
 
 st_crs(MiamiProperties) #note that I'm keeping this in the default WGS84 until I finish the CoastDist calculations
-
 mapview::mapview(MiamiProperties)
+
+MiamiProperties <-
+  #st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")
+  st_read("/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson") %>%
+  
+  mutate(pool = ifelse(str_detect(XF1, "Pool"), "Pool", "No Pool")) %>%  ## create a column re pool
+  dplyr::select(-saleDate, -saleType, -saleQual, -County.Senior, -County.LongTermSenior, -County.Other.Exempt, -Owner1, -Owner2, 
+                -Mailing.Address, -Mailing.City, -Mailing.State, -Mailing.Zip, -Mailing.Country, 
+                -City.Senior, -City.LongTermSenior, -City.Other.Exempt, -Legal1, -Legal2, -Legal3, -Legal4, -Legal5, -Legal6, -XF1, -XF2, -XF3)
 
 #Build Features. Initial ideas: 
 
@@ -126,31 +148,16 @@ mapview::mapview(MiamiProperties)
   #nearby parks/green space? 
   #number of retail/general commercial areas nearby (could be more specific like grocery stores?)
 
-#OSM Data
-miami.base <- 
-  st_read("https://opendata.arcgis.com/datasets/5ece0745e24b4617a49f2e098df8117f_0.geojson") %>%
-  filter(NAME == "MIAMI BEACH" | NAME == "MIAMI") %>%
-  st_union()
-
-xmin = st_bbox(miami.base)[[1]]
-ymin = st_bbox(miami.base)[[2]]
-xmax = st_bbox(miami.base)[[3]]  
-ymax = st_bbox(miami.base)[[4]]
-
-ggplot() +
-  geom_sf(data=miami.base, fill="black") +
-  geom_sf(data=st_as_sfc(st_bbox(miami.base)), colour="red", fill=NA) 
-
-###Distance to Coastline (this calculation has to be in WGS84)
+## Calculate the distance to Coastline (this calculation has to be in WGS84)
 Coastline<-opq(bbox = c(xmin, ymin, xmax, ymax)) %>% 
   add_osm_feature("natural", "coastline") %>%
   osmdata_sf()
 
-#test in meters
+###test in meters
 dist<-geosphere::dist2Line(p=st_coordinates(st_centroid(MiamiProperties)),
                                             line=st_coordinates(Coastline$osm_lines)[,1:2])
 
-#add to MiamiProperties and convert to miles
+### add to MiamiProperties and convert to miles
 MiamiProperties <-
   MiamiProperties %>%
   mutate(CoastDist=(geosphere::dist2Line(p=st_coordinates(st_centroid(MiamiProperties)),
@@ -158,14 +165,12 @@ MiamiProperties <-
 
 hist(MiamiProperties$CoastDist)
 
-
-
-#Convert Miami Data to Local Projection #st_transform('ESRI:102658')
+##Convert Miami Data to Local Projection #st_transform('ESRI:102658')
 MiamiProperties<-
   MiamiProperties%>%
   st_transform('ESRI:102658')
 
-###Bars, pubs, and restaurants
+## Add Data on Bars, pubs, and restaurants
 bars<-opq(bbox = c(xmin, ymin, xmax, ymax)) %>% 
   add_osm_feature(key = 'amenity', value = c("bar", "pub", "restaurant")) %>%
   osmdata_sf()
@@ -177,10 +182,6 @@ bars<-
 bars<-
   bars%>%
   st_transform('ESRI:102658')
-
-ggplot()+
-  geom_sf(data=miami.base, fill="black")+
-  geom_sf(data=bars, colour="red", size=1)
   
 MiamiProperties<-
   MiamiProperties %>%
@@ -191,70 +192,43 @@ MiamiProperties<-
     bars_nn4= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),4),
     bars_nn5= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),5))
 
-#elementary school point data (2015 data)
-Miami.elementary.point <-
-st_read("https://opendata.arcgis.com/datasets/d3db0fce650d4e40a5949b0acae6fe3a_0.geojson") %>%
-filter(CITY == "Miami" | CITY == "Miami Beach")
+### plot yo visulize location
+ggplot()+
+  geom_sf(data=miami.base, fill="black")+
+  geom_sf(data=bars, colour="red", size=1)
 
-mapview::mapview(Miami.elementary.point)
-st_crs(Miami.elementary.point)
-
-#elemantary school boudaries (2018 data)
-
-Miami.elementary.boudnary <-
-  st_read("https://opendata.arcgis.com/datasets/19f5d8dcd9714e6fbd9043ac7a50c6f6_0.geojson") %>%
-  filter(CITY == "Miami" | CITY == "Miami Beach")
-
-mapview::mapview(Miami.elementary.point)
-st_crs(Miami.elementary.point)
-## will need to ggplot this data
-
-
-#park facilities
-Miami.parks <-  
-  st_read("https://opendata.arcgis.com/datasets/8c9528d3e1824db3b14ed53188a46291_0.geojson") %>%
-  filter(CITY == "Miami" | CITY == "Miami Beach")
-  
-mapview::mapview(Miami.parks)
-st_crs(Miami.parks)  
-
-#Crime- Sexual Offenders and Predators within Miami-Dade County point data 
-Miami.sexualoffenders <-  
+## Add data on crime- Sexual Offenders and Predators within Miami-Dade County point data 
+miami.sexualoffenders <-  
   st_read("https://opendata.arcgis.com/datasets/f8759d722aeb4198bfe7c4ad780604d2_0.geojson") %>%
-  filter(CITY == "Miami" | CITY == "Miami Beach")
+  filter(CITY == "MIAMI" | CITY == "MIAMI BEACH" | CITY == "Miami" | CITY == "Miami Beach")
 
-mapview::mapview(Miami.sexualoffenders)
-st_crs(Miami.sexualoffenders) 
-
-
+mapview::mapview(miami.sexualoffenders)
+st_crs(miami.sexualoffenders) 
 
 MiamiProperties$sexualoffenders_buffer =
   st_buffer(MiamiProperties, 660) %>% 
-  aggregate(mutate(Miami.sexualoffenders, counter = 1),., sum) %>%
+  aggregate(mutate(miami.sexualoffenders, counter = 1),., sum) %>%
   pull(counter)
 
 ggplot() + geom_sf(data = miami.base, fill = "grey40") +
-  stat_density2d(data = data.frame(st_coordinates(Miami.sexualoffenders)), 
+  stat_density2d(data = data.frame(st_coordinates(miami.sexualoffenders)), 
                  aes(X, Y, fill = ..level.., alpha = ..level..),
                  size = 0.01, bins = 40, geom = 'polygon') +
   scale_fill_gradient(low = "#25CB10", high = "#FA7800", name = "Density") +
   scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
-  labs(title = "Density of Aggravated Assaults, Boston") +
+  labs(title = "Density of Sexual Offenders in Miami") +
   mapTheme()
-
-## Nearest Neighbor Feature
-st_c <- st_coordinates
 
 MiamiProperties <-
   MiamiProperties %>% 
   mutate(
-    crime_nn1= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Miami.sexualoffenders),1),
-    crime_nn2= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Miami.sexualoffenders),2),
-    crime_nn3= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Miami.sexualoffenders),3),
-    crime_nn4= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Miami.sexualoffenders),4),
-    crime_nn5= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Miami.sexualoffenders),5))
+    crime_nn1= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(miami.sexualoffenders),1),
+    crime_nn2= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(miami.sexualoffenders),2),
+    crime_nn3= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(miami.sexualoffenders),3),
+    crime_nn4= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(miami.sexualoffenders),4),
+    crime_nn5= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(miami.sexualoffenders),5))
 
-## Plot NN count over space - Should increase or decrease?
+### plot to understand the data
 MiamiProperties.plot <- MiamiProperties %>% 
   st_drop_geometry() %>% 
   dplyr::select(Folio, starts_with("crime_")) %>% 
@@ -264,9 +238,7 @@ ggplot(MiamiProperties.plot, aes(x = crime_nn, y = value, group = Folio)) +
   geom_line(alpha = 0.05, color = "royalblue1") +
   theme_bw()
 
-
-
-#Park Facilities
+## Add the data on Park Facilities
 Parks<-st_read("https://opendata.arcgis.com/datasets/8c9528d3e1824db3b14ed53188a46291_0.geojson")%>%
 st_transform('ESRI:102658')
 mapview::mapview(Parks)
@@ -279,11 +251,6 @@ MiamiProperties<-
     parks_nn3= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Parks),3),
     parks_nn4= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Parks),4),
     parks_nn5= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Parks),5))
-
-
-
-
-
 
 ###### BUILD REGRESSION MODELS ######
 
