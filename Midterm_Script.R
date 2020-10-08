@@ -107,6 +107,11 @@ ggplot() +
   geom_sf(data=miami.base, fill="gray30") +
   geom_sf(data=st_as_sfc(st_bbox(miami.base)), colour="red", fill=NA) 
 
+# Loading elementary school boundaries 
+elementary.school.boundaries <- 
+  st_read("https://opendata.arcgis.com/datasets/19f5d8dcd9714e6fbd9043ac7a50c6f6_0.geojson")
+  st_transform('ESRI:102286')
+
 # Read in Property Data (note that these are centroids, may need to convert to points for some analyses)
 MiamiProperties <-
 
