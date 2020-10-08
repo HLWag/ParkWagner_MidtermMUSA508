@@ -98,7 +98,6 @@ MiamiProperties <-
   st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")  
   ## for DP: "/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson"
   #st_transform('ESRI:102658')
-  st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson") 
 
 st_crs(MiamiProperties) #note that I'm keeping this in the default WGS84 until I finish the CoastDist calculations
 
@@ -285,6 +284,30 @@ MiamiProperties<-
 
 
 
+
+
+#TOD or non-TOD; distance to transit stop?
+metrorail_stop<-st_read("https://opendata.arcgis.com/datasets/ee3e2c45427e4c85b751d8ad57dd7b16_0.geojson")%>%
+  st_transform('ESRI:102658')%>%
+  dplyr::select(NAME)
+
+metromover_stop<-st_read("https://opendata.arcgis.com/datasets/aec76104165c4e879b9b0203fa436dab_0.geojson")%>%
+  st_transform('ESRI:102658')%>%
+  dplyr::select(NAME)
+
+metro_stops<-
+  rbind(metromover_stop,metrorail_stop)
+
+#Distance to metro_stop (Added a column for the distance to the nearest stop and a column for homes that are within 0.5 miles of a stop)
+MiamiProperties<-
+  MiamiProperties %>% 
+  mutate(
+    metro_nn1= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(metro_stops),1),
+    TOD=ifelse(metro_nn1<2640,"TOD","Non-TOD"))
+
+
+
+
 ###### BUILD REGRESSION MODELS ######
 
 #do we split the data into the training test and the test set before or after we build our regression models?
@@ -312,6 +335,14 @@ st_drop_geometry(MiamiProperties) %>%
   plotTheme()
 
 #Price as a function of categorical variables
+st_drop_geometry(MiamiProperties) %>%
+  dplyr::select(SalePrice, TOD, Stories)%>%
+  filter(SalePrice <= 1000000) %>%
+  gather(Variable,Value, -SalePrice)%>%
+  ggplot(aes(Value, SalePrice))+
+  geom_bar(position="dodge",stat="summary", fun.y="mean")+
+  facet_wrap(~Variable, ncol=1, scales="free")+
+  plotTheme()
 
 #Correlation across numeric variables
 numericVars <- 
