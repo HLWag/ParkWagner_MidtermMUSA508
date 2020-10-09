@@ -109,12 +109,11 @@ ggplot() +
 
 # Loading elementary school boundaries 
 elementary.school.boundaries <- 
-  st_read("https://opendata.arcgis.com/datasets/19f5d8dcd9714e6fbd9043ac7a50c6f6_0.geojson")
+  st_read("https://opendata.arcgis.com/datasets/19f5d8dcd9714e6fbd9043ac7a50c6f6_0.geojson") %>%
   st_transform('ESRI:102286')
 
 # Read in Property Data (note that these are centroids, may need to convert to points for some analyses)
 MiamiProperties <-
-
   st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")  
   ## for DP: st_read("/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson")
   #st_transform('ESRI:102658')
@@ -126,10 +125,12 @@ MiamiProperties <-
   #st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")
   st_read("/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson") %>%
   
-  mutate(pool = ifelse(str_detect(XF1, "Pool"), "Pool", "No Pool")) %>%  ## create a column re pool
+  mutate(pool = ifelse(str_detect(XF1, "Pool"), "Pool", "No Pool")) %>% 
+  mutate(singlefamily = ifelse(str_detect(Zoning, "SINGLE FAMILY"), "Yes", "No")) %>%
   dplyr::select(-saleDate, -saleType, -saleQual, -County.Senior, -County.LongTermSenior, -County.Other.Exempt, -Owner1, -Owner2, 
                 -Mailing.Address, -Mailing.City, -Mailing.State, -Mailing.Zip, -Mailing.Country, 
-                -City.Senior, -City.LongTermSenior, -City.Other.Exempt, -Legal1, -Legal2, -Legal3, -Legal4, -Legal5, -Legal6, -XF1, -XF2, -XF3)
+                -City.Senior, -City.LongTermSenior, -City.Other.Exempt, -Legal1, -Legal2, -Legal3, -Legal4, -Legal5, -Legal6, -XF1, -XF2, -XF3,
+                -WVDB, -HEX, -GPAR, -County.2nd.HEX, -City.2nd.HEX, -MillCode, -Zoning, -Land.Use)
 
 #Build Features. Initial ideas: 
 
@@ -171,12 +172,12 @@ MiamiProperties <-
 hist(MiamiProperties$CoastDist)
 
 ##Convert Miami Data to Local Projection #st_transform('ESRI:102658')
-MiamiProperties<-
+MiamiProperties <-
   MiamiProperties%>%
   st_transform('ESRI:102658')
 
 ## Add Data on Bars, pubs, and restaurants
-bars<-opq(bbox = c(xmin, ymin, xmax, ymax)) %>% 
+bars <- opq(bbox = c(xmin, ymin, xmax, ymax)) %>% 
   add_osm_feature(key = 'amenity', value = c("bar", "pub", "restaurant")) %>%
   osmdata_sf()
 
@@ -205,7 +206,8 @@ ggplot()+
 ## Add data on crime- Sexual Offenders and Predators within Miami-Dade County point data 
 miami.sexualoffenders <-  
   st_read("https://opendata.arcgis.com/datasets/f8759d722aeb4198bfe7c4ad780604d2_0.geojson") %>%
-  filter(CITY == "MIAMI" | CITY == "MIAMI BEACH" | CITY == "Miami" | CITY == "Miami Beach")
+  filter(CITY == "MIAMI" | CITY == "MIAMI BEACH" | CITY == "Miami" | CITY == "Miami Beach") %>%
+  st_transform('ESRI:102658')
 
 mapview::mapview(miami.sexualoffenders)
 st_crs(miami.sexualoffenders) 
