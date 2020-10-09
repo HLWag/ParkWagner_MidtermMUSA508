@@ -110,10 +110,10 @@ ggplot() +
 # Loading elementary school boundaries 
 elementary.school.boundaries <- 
   st_read("https://opendata.arcgis.com/datasets/19f5d8dcd9714e6fbd9043ac7a50c6f6_0.geojson") %>%
-  st_transform('ESRI:102286')
+  st_transform('ESRI:102658')
 
 # Read in Property Data (note that these are centroids, may need to convert to points for some analyses)
-MiamiProperties <-
+MiamiProperties_original <-
   st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")  
   ## for DP: st_read("/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson")
   #st_transform('ESRI:102658')
@@ -122,8 +122,8 @@ st_crs(MiamiProperties) #note that I'm keeping this in the default WGS84 until I
 mapview::mapview(MiamiProperties)
 
 MiamiProperties <-
-  #st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")
-  st_read("/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson") %>%
+  st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")%>%
+  #st_read("/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson") %>%
   
   mutate(pool = ifelse(str_detect(XF1, "Pool"), "Pool", "No Pool")) %>% 
   mutate(singlefamily = ifelse(str_detect(Zoning, "SINGLE FAMILY"), "Yes", "No")) %>%
