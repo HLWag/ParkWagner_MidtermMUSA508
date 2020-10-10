@@ -198,10 +198,9 @@ MiamiProperties<-
     bars_nn4= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),4),
     bars_nn5= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),5))
 
-
-MiamiProperties$bars.buffer=
-  st_buffer(st_centroid(MiamiProperties), 660)%>%
-  aggregate(mutate(bars_geom, counter=1),., sum)%>%
+MiamiProperties$bars.buffer=#getting an error here
+  st_buffer(MiamiProperties, 660)%>%
+  aggregate(mutate(bars, counter=1),., sum)%>%
   pull(counter)
 
 # bars<-
@@ -289,7 +288,7 @@ MiamiProperties<-
     parks_nn4= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Parks),4),
     parks_nn5= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Parks),5))
 
-MiamiProperties$parks.Buffer =
+MiamiProperties$parks.Buffer = #not working
   st_buffer(MiamiProperties, 660) %>%
   aggregate(mutate(Parks, counter = 1),., sum) %>%
   pull(counter)
@@ -313,6 +312,17 @@ MiamiProperties<-
   mutate(
     metro_nn1= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(metro_stops),1),
     TOD=ifelse(metro_nn1<2640,"TOD","Non-TOD"))
+
+
+#Add Elementary School Name to Each Property
+elementary.school.clean<-
+  elementary.school.boundaries%>%
+  dplyr::select(NAME)%>%
+  rename(elem_name=NAME)
+
+MiamiProperties<-
+  MiamiProperties%>%
+  st_join(elementary.school.clean)
 
 ###### BUILD REGRESSION MODELS ######
 
@@ -349,6 +359,21 @@ reg_d<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>%
             dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, pool, singlefamily, bars_nn5, crime_nn5, parks_nn5, metro_nn1))
 summ(reg_d)
 summary(reg_d)
+
+reg_e<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, pool, singlefamily, bars_nn5, crime_nn5, parks_nn5, metro_nn1, elem_name))
+summ(reg_e)
+summary(reg_e)
+
+reg_f<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, Bed, Bath, Stories, YearBuilt, LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5))
+summ(reg_f)
+summary(reg_f)
+
+reg_g<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, pool, singlefamily, TOD, YearBuilt, LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5, elem_name))
+summ(reg_g)
+summary(reg_g)
 
 ##### CORRELATION #####
 #Seleting between multiple nn variables:
