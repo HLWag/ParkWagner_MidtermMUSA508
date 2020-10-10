@@ -110,7 +110,27 @@ ggplot() +
 # Loading elementary school boundaries 
 elementary.school.boundaries <- 
   st_read("https://opendata.arcgis.com/datasets/19f5d8dcd9714e6fbd9043ac7a50c6f6_0.geojson") %>%
+  filter(CITY == "Miami" | CITY == "Miami Beach") %>%
   st_transform('ESRI:102658')
+
+#Neighborhood Data
+neighborhood<-
+  st_read("https://opendata.arcgis.com/datasets/2f54a0cbd67046f2bd100fb735176e6c_0.geojson")%>%
+  st_transform('ESRI:102658')%>%
+  dplyr::select(LABEL)%>%
+  rename(Neighborhood=LABEL)
+mapview::mapview(neighborhood)
+
+muni_boundary<-
+  st_read("https://opendata.arcgis.com/datasets/5ece0745e24b4617a49f2e098df8117f_0.geojson")%>%
+  filter(NAME=="MIAMI BEACH")%>%
+  st_transform('ESRI:102658')%>%
+  dplyr::select(NAME)%>%
+  rename(Neighborhood=NAME)
+mapview::mapview(muni_boundary)
+
+all_nhoods<-
+  rbind(neighborhood,muni_boundary)
 
 # Read in Property Data (note that these are centroids, may need to convert to points for some analyses)
 MiamiProperties_original <-
@@ -324,6 +344,11 @@ MiamiProperties<-
   MiamiProperties%>%
   st_join(elementary.school.clean)
 
+#Add neighborhood name to each property
+MiamiProperties<-
+  MiamiProperties%>%
+  st_join(all_nhoods)
+
 ###### BUILD REGRESSION MODELS ######
 
 #do we split the data into the training test and the test set before or after we build our regression models?
@@ -439,7 +464,19 @@ ggcorrplot(
   labs(title = "Correlation across numeric variables") 
 
 #Map of dependent variable (sale price)
+Miami.Plot<-
+  MiamiProperties%>%
+  mutate(PricePerSq=SalePrice/ActualSqFt)
 
+ggplot()+
+  geom_sf(data=all_nhoods, fill="grey40")+
+  geom_sf(data=Miami.Plot, aes(colour=q5(PricePerSq)),
+          show.legend="point", size=.75)+
+  scale_colour_manual(values=palette5,
+                      labels=qBr(Miami.Plot, "PricePerSq"),
+                      name="Quintile\nBreaks")+
+  labs(title="Price Per Square Foot, Miami") +
+  mapTheme()
 
 #3 maps of independent variables
 
