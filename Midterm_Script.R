@@ -113,6 +113,25 @@ elementary.school.boundaries <-
   st_read("https://opendata.arcgis.com/datasets/19f5d8dcd9714e6fbd9043ac7a50c6f6_0.geojson") %>%
   st_transform('ESRI:102658')
 
+#Neighborhood Data
+neighborhood<-
+  st_read("https://opendata.arcgis.com/datasets/2f54a0cbd67046f2bd100fb735176e6c_0.geojson")%>%
+  st_transform('ESRI:102658')%>%
+  dplyr::select(LABEL)%>%
+  rename(Neighborhood=LABEL)
+mapview::mapview(neighborhood)
+
+muni_boundary<-
+  st_read("https://opendata.arcgis.com/datasets/5ece0745e24b4617a49f2e098df8117f_0.geojson")%>%
+  filter(NAME=="MIAMI BEACH")%>%
+  st_transform('ESRI:102658')%>%
+  dplyr::select(NAME)%>%
+  rename(Neighborhood=NAME)
+mapview::mapview(muni_boundary)
+
+all_nhoods<-
+  rbind(neighborhood,muni_boundary)
+
 # Read in Property Data (note that these are centroids, may need to convert to points for some analyses)
 MiamiProperties_original <-
   st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")  
@@ -199,6 +218,11 @@ MiamiProperties<-
     bars_nn4= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),4),
     bars_nn5= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),5))
 
+MiamiProperties$bars.buffer=#getting an error here
+  st_buffer(MiamiProperties, 660)%>%
+  aggregate(mutate(bars, counter=1),., sum)%>%
+  pull(counter)
+
 ### plot yo visulize location
 ggplot()+
   geom_sf(data=miami.base, fill="black")+
@@ -279,6 +303,21 @@ MiamiProperties<-
     metro_nn1= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(metro_stops),1),
     TOD=ifelse(metro_nn1<2640,"TOD","Non-TOD"))
 
+#Add Elementary School Name to Each Property
+elementary.school.clean<-
+  elementary.school.boundaries%>%
+  dplyr::select(NAME)%>%
+  rename(elem_name=NAME)
+
+MiamiProperties<-
+  MiamiProperties%>%
+  st_join(elementary.school.clean)
+
+#Add neighborhood name to each property
+MiamiProperties<-
+  MiamiProperties%>%
+  st_join(all_nhoods)
+
 ## Load in census data
 
 census_api_key("41e1c0d912341017fa6f36a5da061d3b23de335e", overwrite = TRUE)
@@ -354,6 +393,58 @@ reg1 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>%
             dplyr::select(SalePrice, Bed, Bath, Stories, YearBuilt, LivingSqFt, Mailing.Zip, bars_nn5, CoastDist, parks_nn5))
 summ(reg1)
 summary(reg1)
+
+
+#Hannah's Regressions
+reg_a<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, YearBuilt, LivingSqFt, Stories, Bed, Bath, CoastDist, TOD, pool, singlefamily, bars_nn1, crime_nn1, parks_nn1))
+summ(reg_a)
+summary(reg_a)
+
+
+reg_b<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, 
+                          TOD, pool, singlefamily, bars_nn1, crime_nn1, parks_nn1))
+summ(reg_b)
+summary(reg_b)
+
+
+reg_c<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, 
+                          TOD, pool, singlefamily, bars_nn5, crime_nn5, parks_nn5))
+summ(reg_c)
+summary(reg_c)
+
+
+reg_d<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, 
+                          pool, singlefamily, bars_nn5, crime_nn5, parks_nn5, metro_nn1))
+summ(reg_d)
+summary(reg_d)
+
+reg_e<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, 
+                          pool, singlefamily, bars_nn5, crime_nn5, parks_nn5, metro_nn1, elem_name))
+summ(reg_e)
+summary(reg_e)
+
+reg_f<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, Bed, Bath, Stories, YearBuilt, 
+                          LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5))
+summ(reg_f)
+summary(reg_f)
+
+reg_g<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, pool, singlefamily, TOD, YearBuilt,
+                          LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5, elem_name))
+summ(reg_g)
+summary(reg_g)
+
+reg_h<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, pool, singlefamily, TOD, YearBuilt,
+                          LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5, elem_name, Neighborhood))
+summ(reg_h)
+summary(reg_h)
 
 
 
@@ -434,17 +525,65 @@ ggcorrplot(
 
 
 #Map of dependent variable (sale price)
-
-
-#3 maps of independent variables
+Miami.Plot<-
+  MiamiProperties%>%
+  mutate(PricePerSq=SalePrice/ActualSqFt)
 
 ggplot()+
-  geom_sf(data=elementary.school.boundaries)+
-  labs(title="Elementary School Districts") +
+  geom_sf(data=all_nhoods, fill="grey40")+
+  geom_sf(data=Miami.Plot, aes(colour=q5(PricePerSq)),
+          show.legend="point", size=.75)+
+  scale_colour_manual(values=palette5,
+                      labels=qBr(Miami.Plot, "PricePerSq"),
+                      name="Quintile\nBreaks")+
+  labs(title="Price Per Square Foot, Miami") +
+  mapTheme()
+
+#3 maps of independent variables
+Parks_map<-
+  Parks%>%
+  st_intersection(all_nhoods)
+ggplot()+
+  geom_sf(data=all_nhoods, fill="grey40")+
+  geom_sf(data=Parks_map, size=1, color="lightgreen")+
+  labs(title="Park Locations") +
+  mapTheme()
+
+bars_map<-
+  bars%>%
+  st_intersection(all_nhoods)
+ggplot()+
+  geom_sf(data=all_nhoods, fill="grey40")+
+  geom_sf(data=bars_map, size=1, color="red")+
+  labs(title="Bar, Pub, and Restaurant Locations") +
+  mapTheme()
+
+metro_stops_map<-
+  metro_stops%>%
+  st_intersection(all_nhoods)
+ggplot()+
+  geom_sf(data=all_nhoods, fill="grey40")+
+  geom_sf(data=metro_stops_map, size=1, color="orange")+
+  labs(title="Metromover and Metrorail Stops") +
   mapTheme()
 
 
+miami.base_map<-
+  miami.base%>%
+  st_transform('ESRI:102658')
+elem_map<-
+  elementary.school.boundaries%>%
+  st_crop(miami.base_map)
+ggplot()+
+  geom_sf(data=all_nhoods, fill="grey40")+
+  geom_sf(data=elem_map, color="orange", fill="transparent")+
+  labs(title="Elementary School District Boundaries") +
+  mapTheme()
 
+ggplot()+
+  geom_sf(data=all_nhoods) +
+  labs(title="Neighborhood Boundaries") +
+  mapTheme()
 
 
 #######
