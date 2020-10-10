@@ -188,7 +188,7 @@ bars<-
 bars<-
   bars%>%
   st_transform('ESRI:102658')
-  
+
 MiamiProperties<-
   MiamiProperties %>%
   mutate(
@@ -197,6 +197,35 @@ MiamiProperties<-
     bars_nn3= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),3),
     bars_nn4= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),4),
     bars_nn5= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),5))
+
+
+MiamiProperties$bars.buffer=
+  st_buffer(st_centroid(MiamiProperties), 660)%>%
+  aggregate(mutate(bars_geom, counter=1),., sum)%>%
+  pull(counter)
+
+# bars<-
+#   bars%>%
+#   mutate(bars_counter=1)
+# 
+# #MiamiProperty_buffer<-
+#  # st_buffer(MiamiProperties, 660)
+# 
+# Bars_join<-
+#   st_join(MiamiProperty_buffer, bars)
+# 
+# MiamiBars_buffer<-
+#   st_buffer(Bars_join, 660) %>%
+#   group_by(geometry) %>% summarize(bars = count(bars))
+# 
+# 
+# MiamiProperties$parks.Buffer =
+#   st_buffer(MiamiProperties, 660) %>%
+#   aggregate(mutate(Parks, counter = 1),., sum) %>%
+#   pull(counter)
+# 
+# 
+# Miami_bars <- st_join(MiamiProperties, bars)
 
 ### plot yo visulize location
 ggplot()+
@@ -212,7 +241,7 @@ miami.sexualoffenders <-
 mapview::mapview(miami.sexualoffenders)
 st_crs(miami.sexualoffenders) 
 
-MiamiProperties$sexualoffenders_buffer =
+MiamiProperties$sexualoffenders_buffer = #I am getting an error with this section?
   st_buffer(MiamiProperties, 660) %>% 
   aggregate(mutate(miami.sexualoffenders, counter = 1),., sum) %>%
   pull(counter)
@@ -247,7 +276,8 @@ ggplot(MiamiProperties.plot, aes(x = crime_nn, y = value, group = Folio)) +
 
 ## Add the data on Park Facilities
 Parks<-st_read("https://opendata.arcgis.com/datasets/8c9528d3e1824db3b14ed53188a46291_0.geojson")%>%
-st_transform('ESRI:102658')
+  st_transform('ESRI:102658')
+
 mapview::mapview(Parks)
 
 MiamiProperties<-
@@ -258,6 +288,12 @@ MiamiProperties<-
     parks_nn3= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Parks),3),
     parks_nn4= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Parks),4),
     parks_nn5= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Parks),5))
+
+MiamiProperties$parks.Buffer =
+  st_buffer(MiamiProperties, 660) %>%
+  aggregate(mutate(Parks, counter = 1),., sum) %>%
+  pull(counter)
+
 
 #TOD or non-TOD; distance to transit stop?
 metrorail_stop<-st_read("https://opendata.arcgis.com/datasets/ee3e2c45427e4c85b751d8ad57dd7b16_0.geojson")%>%
@@ -290,6 +326,29 @@ summary(reg1)
 
 
 
+#Hannah's Regressions
+reg_a<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, YearBuilt, LivingSqFt, Stories, Bed, Bath, CoastDist, TOD, pool, singlefamily, bars_nn1, crime_nn1, parks_nn1))
+summ(reg_a)
+summary(reg_a)
+
+
+reg_b<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, TOD, pool, singlefamily, bars_nn1, crime_nn1, parks_nn1))
+summ(reg_b)
+summary(reg_b)
+
+
+reg_c<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, TOD, pool, singlefamily, bars_nn5, crime_nn5, parks_nn5))
+summ(reg_c)
+summary(reg_c)
+
+
+reg_d<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, pool, singlefamily, bars_nn5, crime_nn5, parks_nn5, metro_nn1))
+summ(reg_d)
+summary(reg_d)
 
 ##### CORRELATION #####
 #Seleting between multiple nn variables:
