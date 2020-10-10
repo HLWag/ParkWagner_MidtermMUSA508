@@ -346,6 +346,22 @@ MiamiProperties <-st_join(MiamiProperties,tracts18)
 
 
 
+### nn for parks 
+
+MiamiProperties$parks.Buffer =
+  st_buffer(MiamiProperties, 660) %>%
+  aggregate(mutate(dplyr::select(Parks), counter = 1),., sum) %>%
+  pull(counter)
+
+MiamiProperties <- MiamiProperties %>%
+  mutate(parks.Buffer = replace_na(parks.Buffer, 0))
+
+### nn for sale price
+
+MiamiProperties$SalePrice.Buffer =
+  st_buffer(MiamiProperties, 660)
+
+
 ###### BUILD REGRESSION MODELS ######
 
 #do we split the data into the training test and the test set before or after we build our regression models?
