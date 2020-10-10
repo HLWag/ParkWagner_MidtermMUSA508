@@ -292,10 +292,38 @@ summary(reg1)
 
 
 ##### CORRELATION #####
-#Price as a function of continuous variables
+#Seleting between multiple nn variables:
+st_drop_geometry(MiamiProperties) %>% 
+  dplyr::select(SalePrice, crime_nn1, crime_nn2, crime_nn3, crime_nn4, crime_nn5) %>%
+  gather(Variable, Value, -SalePrice) %>% 
+  ggplot(aes(Value, SalePrice)) +
+  geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~Variable, ncol = 3, scales = "free") +
+  labs(title = "Correlations between Sale Price and Crime Features") +
+  plotTheme()
+
+st_drop_geometry(MiamiProperties) %>% 
+  dplyr::select(SalePrice, bars_nn1, bars_nn2, bars_nn3, bars_nn4, bars_nn5) %>%
+  gather(Variable, Value, -SalePrice) %>% 
+  ggplot(aes(Value, SalePrice)) +
+  geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~Variable, ncol = 3, scales = "free") +
+  labs(title = "Correlations between Sale Price and Bar/Restaurant Features") +
+  plotTheme()
+
+st_drop_geometry(MiamiProperties) %>% 
+  dplyr::select(SalePrice, parks_nn1, parks_nn2, parks_nn3, parks_nn4, parks_nn5) %>%
+  gather(Variable, Value, -SalePrice) %>% 
+  ggplot(aes(Value, SalePrice)) +
+  geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~Variable, ncol = 3, scales = "free") +
+  labs(title = "Correlations between Sale Price and Park Features") +
+  plotTheme()
+
+#Price as a function of continuous variables (we need four of these for the assignment)
 st_drop_geometry(MiamiProperties) %>% 
   mutate(Age = 2020 - YearBuilt) %>%
-  dplyr::select(SalePrice, LivingSqFt, Age) %>%
+  dplyr::select(SalePrice, LivingSqFt, Age, CoastDist, bars_nn1, bars_nn2, crime_nn1, crime_nn2, parks_nn1, parks_nn2, metro_nn1) %>%
   filter(SalePrice <= 1000000, Age < 500) %>%
   gather(Variable, Value, -SalePrice) %>% 
   ggplot(aes(Value, SalePrice)) +
@@ -306,7 +334,7 @@ st_drop_geometry(MiamiProperties) %>%
 
 #Price as a function of categorical variables
 st_drop_geometry(MiamiProperties) %>%
-  dplyr::select(SalePrice, TOD, Stories)%>%
+  dplyr::select(SalePrice, TOD, Stories, pool, singlefamily)%>%
   filter(SalePrice <= 1000000) %>%
   gather(Variable,Value, -SalePrice)%>%
   ggplot(aes(Value, SalePrice))+
@@ -314,7 +342,7 @@ st_drop_geometry(MiamiProperties) %>%
   facet_wrap(~Variable, ncol=1, scales="free")+
   plotTheme()
 
-#Correlation across numeric variables
+#Correlation Matrix
 numericVars <- 
   select_if(st_drop_geometry(MiamiProperties), is.numeric) %>% na.omit()
 
@@ -325,3 +353,13 @@ ggcorrplot(
   type="lower",
   insig = "blank") +  
   labs(title = "Correlation across numeric variables") 
+
+#Map of dependent variable (sale price)
+
+
+#3 maps of independent variables
+
+ggplot()+
+  geom_sf(data=elementary.school.boundaries)+
+  labs(title="Elementary School Districts") +
+  mapTheme()
