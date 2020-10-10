@@ -16,6 +16,7 @@ library(ggstance)
 library(broom.mixed)
 library(osmdata)
 library(geosphere)
+library(raster)
 
 # functions
 mapTheme <- function(base_size = 12) {
@@ -369,36 +370,49 @@ summary(reg_a)
 
 
 reg_b<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, TOD, pool, singlefamily, bars_nn1, crime_nn1, parks_nn1))
+            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, 
+                          TOD, pool, singlefamily, bars_nn1, crime_nn1, parks_nn1))
 summ(reg_b)
 summary(reg_b)
 
 
 reg_c<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, TOD, pool, singlefamily, bars_nn5, crime_nn5, parks_nn5))
+            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, 
+                          TOD, pool, singlefamily, bars_nn5, crime_nn5, parks_nn5))
 summ(reg_c)
 summary(reg_c)
 
 
 reg_d<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, pool, singlefamily, bars_nn5, crime_nn5, parks_nn5, metro_nn1))
+            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, 
+                          pool, singlefamily, bars_nn5, crime_nn5, parks_nn5, metro_nn1))
 summ(reg_d)
 summary(reg_d)
 
 reg_e<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, pool, singlefamily, bars_nn5, crime_nn5, parks_nn5, metro_nn1, elem_name))
+            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, 
+                          pool, singlefamily, bars_nn5, crime_nn5, parks_nn5, metro_nn1, elem_name))
 summ(reg_e)
 summary(reg_e)
 
 reg_f<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-            dplyr::select(SalePrice, Bed, Bath, Stories, YearBuilt, LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5))
+            dplyr::select(SalePrice, Bed, Bath, Stories, YearBuilt, 
+                          LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5))
 summ(reg_f)
 summary(reg_f)
 
 reg_g<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-            dplyr::select(SalePrice, pool, singlefamily, TOD, YearBuilt, LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5, elem_name))
+            dplyr::select(SalePrice, pool, singlefamily, TOD, YearBuilt,
+                          LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5, elem_name))
 summ(reg_g)
 summary(reg_g)
+
+reg_h<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, pool, singlefamily, TOD, YearBuilt,
+                          LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5, elem_name, Neighborhood))
+summ(reg_h)
+summary(reg_h)
+
 
 ##### CORRELATION #####
 #Seleting between multiple nn variables:
@@ -429,10 +443,13 @@ st_drop_geometry(MiamiProperties) %>%
   labs(title = "Correlations between Sale Price and Park Features") +
   plotTheme()
 
-#Price as a function of continuous variables (we need four of these for the assignment)
+#Price as a function of continuous variables (we need four of these plots for the assignment)
 st_drop_geometry(MiamiProperties) %>% 
   mutate(Age = 2020 - YearBuilt) %>%
-  dplyr::select(SalePrice, LivingSqFt, Age, CoastDist, bars_nn1, bars_nn2, crime_nn1, crime_nn2, parks_nn1, parks_nn2, metro_nn1) %>%
+  dplyr::select(SalePrice, LivingSqFt, Bed, Bath, Units, Stories, Age, CoastDist, bars_nn1, bars_nn2, 
+                bars_nn3, bars_nn4, bars_nn5, crime_nn1, crime_nn2, crime_nn3, 
+                crime_nn4, crime_nn5, parks_nn1, parks_nn2, parks_nn3, parks_nn4, 
+                parks_nn5, metro_nn1) %>%
   filter(SalePrice <= 1000000, Age < 500) %>%
   gather(Variable, Value, -SalePrice) %>% 
   ggplot(aes(Value, SalePrice)) +
@@ -463,6 +480,9 @@ ggcorrplot(
   insig = "blank") +  
   labs(title = "Correlation across numeric variables") 
 
+#Correlation Test
+cor.test(MiamiProperties$LivingSqFt, MiamiProperties$SalePrice, method = "pearson")
+
 #Map of dependent variable (sale price)
 Miami.Plot<-
   MiamiProperties%>%
@@ -478,9 +498,102 @@ ggplot()+
   labs(title="Price Per Square Foot, Miami") +
   mapTheme()
 
-#3 maps of independent variables
+#3 maps of independent variables (just a start, needs some tweaking)
+Parks_map<-
+  Parks%>%
+  st_intersection(all_nhoods)
+ggplot()+
+  geom_sf(data=all_nhoods, fill="grey40")+
+  geom_sf(data=Parks_map, size=1, color="lightgreen")+
+  labs(title="Park Locations") +
+  mapTheme()
+
+bars_map<-
+  bars%>%
+  st_intersection(all_nhoods)
+ggplot()+
+  geom_sf(data=all_nhoods, fill="grey40")+
+  geom_sf(data=bars_map, size=1, color="red")+
+  labs(title="Bar, Pub, and Restaurant Locations") +
+  mapTheme()
+
+metro_stops_map<-
+  metro_stops%>%
+  st_intersection(all_nhoods)
+ggplot()+
+  geom_sf(data=all_nhoods, fill="grey40")+
+  geom_sf(data=metro_stops_map, size=1, color="orange")+
+  labs(title="Metromover and Metrorail Stops") +
+  mapTheme()
+
+
+miami.base_map<-
+  miami.base%>%
+  st_transform('ESRI:102658')
+elem_map<-
+  elementary.school.boundaries%>%
+  st_crop(miami.base_map)
+ggplot()+
+  geom_sf(data=all_nhoods, fill="grey40")+
+  geom_sf(data=elem_map, color="orange", fill="transparent")+
+  labs(title="Elementary School District Boundaries") +
+  mapTheme()
 
 ggplot()+
-  geom_sf(data=elementary.school.boundaries)+
-  labs(title="Elementary School Districts") +
+  geom_sf(data=all_nhoods) +
+  labs(title="Neighborhood Boundaries") +
   mapTheme()
+
+#Mean Absolute Error (Hannah's attempt at following Chaper 4)
+inTrain <- createDataPartition(
+  y = paste(MiamiProperties$TOD, MiamiProperties$pool, MiamiProperties$singlefamily, MiamiProperties$Property.Zip, MiamiProperties$Neighborhood, MiamiProperties$elem_name), 
+  p = .60, list = FALSE)
+Miami.training <- MiamiProperties[inTrain,] 
+Miami.test <- MiamiProperties[-inTrain,]  
+
+reg.training <- lm(SalePrice ~ ., data = st_drop_geometry(Miami.training) %>% 
+                     dplyr::select(SalePrice, pool, singlefamily, TOD, YearBuilt,
+                                   LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5, crime_nn1))
+
+Miami.test <-
+  Miami.test %>%
+  mutate(SalePrice.Predict = predict(reg.training, Miami.test),
+         SalePrice.Error = SalePrice.Predict - SalePrice,
+         SalePrice.AbsError = abs(SalePrice.Predict - SalePrice),
+         SalePrice.APE = (abs(SalePrice.Predict - SalePrice)) / SalePrice.Predict)%>%
+  filter(SalePrice < 5000000)
+
+mean(Miami.test$SalePrice.AbsError, na.rm = T)
+mean(Miami.test$SalePrice.APE, na.rm = T)
+
+#Generalizability - cross validation
+fitControl <- trainControl(method = "cv", number = 100)
+set.seed(825)
+
+reg.cv <- 
+  train(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+          dplyr::select(SalePrice, pool, singlefamily, TOD, YearBuilt,
+                        LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5, crime_nn1), 
+        method = "lm", trControl = fitControl, na.action = na.pass)
+
+reg.cv
+
+
+#Accounting for Neighborhood
+reg.nhood <- lm(SalePrice ~ ., data = as.data.frame(Miami.training) %>% 
+                 dplyr::select(Neighborhood, SalePrice, pool, singlefamily, TOD, YearBuilt,
+                               LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5, crime_nn1))
+
+Miami.test.nhood <-
+  Miami.test %>%
+  mutate(Regression = "Neighborhood Effects",
+         SalePrice.Predict = predict(reg.nhood, Miami.test),
+         SalePrice.Error = SalePrice - SalePrice.Predict,
+         SalePrice.AbsError = abs(SalePrice - SalePrice.Predict),
+         SalePrice.APE = (abs(SalePrice - SalePrice.Predict)) / SalePrice)%>%
+  filter(SalePrice < 5000000)
+
+summary(reg.nhood)
+
+#Account for Elem School
+
