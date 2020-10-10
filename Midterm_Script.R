@@ -218,10 +218,14 @@ MiamiProperties<-
     bars_nn4= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),4),
     bars_nn5= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(bars),5))
 
-MiamiProperties$bars.buffer=#getting an error here
-  st_buffer(MiamiProperties, 660)%>%
-  aggregate(mutate(bars, counter=1),., sum)%>%
+MiamiProperties$bars_Buffer =
+  st_buffer(MiamiProperties, 660) %>%
+  aggregate(mutate(dplyr::select(bars), counter = 1),., sum) %>%
   pull(counter)
+
+MiamiProperties<-
+  MiamiProperties%>%
+  mutate(bars_Buffer = replace_na(bars_Buffer, 0))
 
 ### plot yo visulize location
 ggplot()+
@@ -237,10 +241,14 @@ miami.sexualoffenders <-
 mapview::mapview(miami.sexualoffenders)
 st_crs(miami.sexualoffenders) 
 
-MiamiProperties$sexualoffenders_buffer =
-  st_buffer(MiamiProperties, 660) %>% 
-  aggregate(mutate(miami.sexualoffenders, counter = 1),., sum) %>%
+MiamiProperties$sexualoffenders_Buffer =
+  st_buffer(MiamiProperties, 660) %>%
+  aggregate(mutate(dplyr::select(miami.sexualoffenders), counter = 1),., sum) %>%
   pull(counter)
+
+MiamiProperties<-
+  MiamiProperties%>%
+  mutate(sexualoffenders_Buffer = replace_na(sexualoffenders_Buffer, 0))
 
 ggplot() + geom_sf(data = miami.base, fill = "grey40") +
   stat_density2d(data = data.frame(st_coordinates(miami.sexualoffenders)), 
@@ -283,6 +291,15 @@ MiamiProperties<-
     parks_nn3= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Parks),3),
     parks_nn4= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Parks),4),
     parks_nn5= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(Parks),5))
+
+MiamiProperties$parks.Buffer =
+  st_buffer(MiamiProperties, 660) %>%
+  aggregate(mutate(dplyr::select(Parks), counter = 1),., sum) %>%
+  pull(counter)
+
+MiamiProperties<-
+  MiamiProperties%>%
+  mutate(parks.Buffer = replace_na(parks.Buffer, 0))
 
 #TOD or non-TOD; distance to transit stop?
 metrorail_stop<-st_read("https://opendata.arcgis.com/datasets/ee3e2c45427e4c85b751d8ad57dd7b16_0.geojson")%>%
@@ -606,3 +623,59 @@ summary(reg3)
 reg4 <- reg3 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
                      dplyr::select(SalePrice, ActualSqFt))
 summary(reg4)
+
+
+
+#Mean Absolute Error (Hannah's attempt at following Chaper 4)
+inTrain <- createDataPartition(
+  y = paste(MiamiProperties$TOD, MiamiProperties$pool, MiamiProperties$singlefamily, MiamiProperties$Property.Zip, MiamiProperties$Neighborhood, MiamiProperties$elem_name), 
+  p = .60, list = FALSE)
+Miami.training <- MiamiProperties[inTrain,] 
+Miami.test <- MiamiProperties[-inTrain,]  
+
+reg.training <- lm(SalePrice ~ ., data = st_drop_geometry(Miami.training) %>% 
+                     dplyr::select(SalePrice, pool, singlefamily, TOD, YearBuilt,
+                                   LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5, crime_nn1))
+
+Miami.test <-
+  Miami.test %>%
+  mutate(SalePrice.Predict = predict(reg.training, Miami.test),
+         SalePrice.Error = SalePrice.Predict - SalePrice,
+         SalePrice.AbsError = abs(SalePrice.Predict - SalePrice),
+         SalePrice.APE = (abs(SalePrice.Predict - SalePrice)) / SalePrice.Predict)%>%
+  filter(SalePrice < 5000000)
+
+mean(Miami.test$SalePrice.AbsError, na.rm = T)
+mean(Miami.test$SalePrice.APE, na.rm = T)
+
+#Generalizability - cross validation
+fitControl <- trainControl(method = "cv", number = 100)
+set.seed(825)
+
+reg.cv <- 
+  train(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+          dplyr::select(SalePrice, pool, singlefamily, TOD, YearBuilt,
+                        LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5, crime_nn1), 
+        method = "lm", trControl = fitControl, na.action = na.pass)
+
+reg.cv
+
+
+#Accounting for Neighborhood or Elem School (or both?)
+reg.nhood <- lm(SalePrice ~ ., data = as.data.frame(Miami.training) %>% 
+                  dplyr::select(Neighborhood, SalePrice, pool, singlefamily, TOD, YearBuilt,
+                                LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5, crime_nn1))
+
+Miami.test.nhood <-
+  Miami.test %>%
+  mutate(Regression = "Neighborhood Effects",
+         SalePrice.Predict = predict(reg.nhood, Miami.test),
+         SalePrice.Error = SalePrice - SalePrice.Predict,
+         SalePrice.AbsError = abs(SalePrice - SalePrice.Predict),
+         SalePrice.APE = (abs(SalePrice - SalePrice.Predict)) / SalePrice)%>%
+  filter(SalePrice < 5000000)
+
+summary(reg.nhood)
+
+
+
