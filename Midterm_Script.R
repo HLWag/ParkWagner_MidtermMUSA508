@@ -232,8 +232,12 @@ MiamiProperties<-
   MiamiProperties%>%
   mutate(sexualoffenders_Buffer = replace_na(sexualoffenders_Buffer, 0))
 
-ggplot() + geom_sf(data = miami.base, fill = "grey40") +
-  stat_density2d(data = data.frame(st_coordinates(miami.sexualoffenders)), 
+sexual_offend_map<-
+  miami.sexualoffenders%>%
+  st_intersection(all_nhoods)
+
+ggplot() + geom_sf(data = all_nhoods, fill = "grey40") +
+  stat_density2d(data = data.frame(st_coordinates(sexual_offend_map)), 
                  aes(X, Y, fill = ..level.., alpha = ..level..),
                  size = 0.01, bins = 40, geom = 'polygon') +
   scale_fill_gradient(low = "#25CB10", high = "#FA7800", name = "Density") +
@@ -461,12 +465,16 @@ reg_h<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>%
 summ(reg_h)
 summary(reg_h)
 
-
+reg_best<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+               dplyr::select(SalePrice, pool, singlefamily,CoastDist,
+                             LivingSqFt, parks_nn1, bars_nn1, crime_nn1, MedHHInc, 
+                             MedRent, pctBachelors, pctCarCommute, pctPubCommute, pctOwnerHH, Property.Zip))
+summary(reg_best)
 
 ##### CORRELATION #####
 #Seleting between multiple nn variables:
 st_drop_geometry(MiamiProperties) %>% 
-  dplyr::select(SalePrice, crime_nn1, crime_nn2, crime_nn3, crime_nn4, crime_nn5) %>%
+  dplyr::select(SalePrice, crime_nn1, crime_nn2, crime_nn3, crime_nn4, crime_nn5, sexualoffenders_Buffer) %>%
   gather(Variable, Value, -SalePrice) %>% 
   ggplot(aes(Value, SalePrice)) +
   geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
@@ -475,7 +483,7 @@ st_drop_geometry(MiamiProperties) %>%
   plotTheme()
 
 st_drop_geometry(MiamiProperties) %>% 
-  dplyr::select(SalePrice, bars_nn1, bars_nn2, bars_nn3, bars_nn4, bars_nn5) %>%
+  dplyr::select(SalePrice, bars_nn1, bars_nn2, bars_nn3, bars_nn4, bars_nn5, bars_Buffer) %>%
   gather(Variable, Value, -SalePrice) %>% 
   ggplot(aes(Value, SalePrice)) +
   geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
@@ -484,7 +492,7 @@ st_drop_geometry(MiamiProperties) %>%
   plotTheme()
 
 st_drop_geometry(MiamiProperties) %>% 
-  dplyr::select(SalePrice, parks_nn1, parks_nn2, parks_nn3, parks_nn4, parks_nn5) %>%
+  dplyr::select(SalePrice, parks_nn1, parks_nn2, parks_nn3, parks_nn4, parks_nn5, parks.Buffer) %>%
   gather(Variable, Value, -SalePrice) %>% 
   ggplot(aes(Value, SalePrice)) +
   geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
@@ -564,6 +572,15 @@ ggplot()+
   labs(title="Park Locations") +
   mapTheme()
 
+ggplot() + geom_sf(data = all_nhoods, fill = "grey40") +
+  stat_density2d(data = data.frame(st_coordinates(Parks_map)), 
+                 aes(X, Y, fill = ..level.., alpha = ..level..),
+                 size = 0.01, bins = 40, geom = 'polygon') +
+  scale_fill_gradient(low = "#25CB10", high = "#FA7800", name = "Density") +
+  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
+  labs(title = "Density of Parks in Miami") +
+  mapTheme()
+
 bars_map<-
   bars%>%
   st_intersection(all_nhoods)
@@ -572,6 +589,16 @@ ggplot()+
   geom_sf(data=bars_map, size=1, color="red")+
   labs(title="Bar, Pub, and Restaurant Locations") +
   mapTheme()
+
+ggplot() + geom_sf(data = all_nhoods, fill = "grey40") +
+  stat_density2d(data = data.frame(st_coordinates(bars_map)), 
+                 aes(X, Y, fill = ..level.., alpha = ..level..),
+                 size = 0.01, bins = 40, geom = 'polygon') +
+  scale_fill_gradient(low = "#25CB10", high = "#FA7800", name = "Density") +
+  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
+  labs(title = "Density of Bars, Restaurants, and Pubs in Miami") +
+  mapTheme()
+
 
 metro_stops_map<-
   metro_stops%>%
