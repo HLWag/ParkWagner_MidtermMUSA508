@@ -1,6 +1,6 @@
 
 ##### SETUP #####
-install.packages("geosphere")
+#install.packages("geosphere")
 library(tidyverse)
 library(sf)
 library(spdep)
@@ -105,8 +105,9 @@ xmax = st_bbox(miami.base)[[3]]
 ymax = st_bbox(miami.base)[[4]]
 
 ggplot() +
-  geom_sf(data=miami.base, fill="gray30") +
-  geom_sf(data=st_as_sfc(st_bbox(miami.base)), colour="red", fill=NA) 
+  geom_sf(data=miami.base, fill="gray45", color = "gray20") +
+  ggtitle("Miami Basemap") +
+  geom_sf(data=st_as_sfc(st_bbox(miami.base)), colour="coral4", fill=NA) 
 
 # Loading elementary school boundaries 
 elementary.school.boundaries <- 
@@ -152,27 +153,8 @@ MiamiProperties <-
                 -City.Senior, -City.LongTermSenior, -City.Other.Exempt, -Legal1, -Legal2, -Legal3, -Legal4, -Legal5, -Legal6, -XF1, -XF2, -XF3,
                 -WVDB, -HEX, -GPAR, -County.2nd.HEX, -City.2nd.HEX, -MillCode, -Zoning, -Land.Use)
 
-#Build Features. Initial ideas: 
+st_crs(MiamiProperties)
 
-##AVAILABLE IN UNDERLYING DATA
-  #neighborhood - I think Ken mentioned that he hasn't been able to find a neighborhood file for Miami, could we use zipcode as proxy (Mailing.Zip field)?
-  #Lot size (LotSize field)  
-  #living area (LivingSqFt field, Bed field, Bath field, Stories field? Select one I think)
-  #age (based on the YearBuilt field)
-  #house style (not sure this is available)
-  #Extra feature codes (fields XF1, XF2, XF3; see metadata spreadsheet. Should we do something with these?)
-  #Zoning (Zoning field)
-  #the metadata spreadsheet also indicated there are fields for subareas and building element types, but I'm having a hard time locating those within the data
-
-##TO FIND USING OPEN DATA - need to brainstorm this more, some initial ideas below
-  #distance to coastline (I computed this and added the CoastDist field)
-  #exposure to crime (assaults? these data are hard to find. jail bookings? https://gis-mdc.opendata.arcgis.com/datasets/jail-bookings-may-29-2015-to-current  )
-  #distance to airport? available in OSM
-  #Education (e.g., distance to nearest school?) available in OSM; school zone? - look into this?
-  #Number of restaurants/bars nearby? Available in OSM
-  #number of libraries nearby? Available in OSM
-  #nearby parks/green space? 
-  #number of retail/general commercial areas nearby (could be more specific like grocery stores?)
 
 ## Calculate the distance to Coastline (this calculation has to be in WGS84)
 Coastline<-opq(bbox = c(xmin, ymin, xmax, ymax)) %>% 
@@ -318,7 +300,7 @@ MiamiProperties<-
   MiamiProperties %>% 
   mutate(
     metro_nn1= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(metro_stops),1),
-    TOD=ifelse(metro_nn1<2640,"TOD","Non-TOD"))
+    Halfmile_metro=ifelse(metro_nn1<2640,"Halfmile_metro","Non_Halfmile_metro"))
 
 #Add Elementary School Name to Each Property
 elementary.school.clean<-
@@ -413,10 +395,10 @@ MiamiProperties <- MiamiProperties %>%
   mutate(parks.Buffer = replace_na(parks.Buffer, 0))
 
 ### nn for sale price
-
-MiamiProperties$SalePrice.Buffer =
-  st_buffer(MiamiProperties, 660)
-
+MiamiProperties$SalesPrice.Buffer =
+  st_buffer(MiamiProperties, 1320) %>%
+  aggregate(mutate(dplyr::select(SalesPrice), counter = 1),., mean) %>%
+  pull(counter)
 
 ###### BUILD REGRESSION MODELS ######
 
@@ -630,16 +612,36 @@ summary(reg2)
 
 reg3 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
              dplyr::select(SalePrice, LotSize, Bed, Bath, Stories, EffectiveYearBuilt, ActualSqFt,
-                           crime_nn5, bars_nn1, parks_nn5, metro_nn1, 
-                           MedHHInc, pctBlack, pctHis, pctBlackorHis, 
+                          sexualoffenders_Buffer, bars_Buffer, parks_nn1, metro_nn1,
+                           MedHHInc, pctBlack, pctHis, pctBlack, pctHis,
                            pctBachelors, pctPoverty, pool, singlefamily, pctOwnerHH))
 summary(reg3)
 
+step( lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+           dplyr::select(SalePrice, LotSize, Bed, Bath, Stories, EffectiveYearBuilt, ActualSqFt,
+                         sexualoffenders_Buffer, bars_Buffer, parks_nn1, metro_nn1,
+                         MedHHInc, pctBlack, pctHis, pctBlack, pctHis,
+                         pctBachelors, pctPoverty, pool, singlefamily, pctOwnerHH)), direction="backward")
 
-reg4 <- reg3 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-                     dplyr::select(SalePrice, ActualSqFt))
+reg4 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+             dplyr::select(SalePrice, LotSize, Bed, Bath, Stories, EffectiveYearBuilt, ActualSqFt,
+                          parks_nn1,MedHHInc, pctBlack, pctHis, pctBlack, pctHis, 
+                           pctBachelors, pctPoverty, pool, singlefamily, pctOwnerHH, pctRenterHH))
 summary(reg4)
 
+
+##stepwise backward function
+step( lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+           dplyr::select(SalePrice, LotSize, Bed, Bath, Stories, EffectiveYearBuilt, ActualSqFt,
+                         sexualoffenders_Buffer, bars_Buffer, parks_nn1, metro_nn1,
+                         MedHHInc, pctBlack, pctHis, pctBlack, pctHis,
+                         pctBachelors, pctPoverty, pool, singlefamily, pctOwnerHH)), direction="backward")
+##output
+reg5 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+             dplyr::select(SalePrice, LotSize, Bed, Bath, Stories, EffectiveYearBuilt, 
+                            ActualSqFt, parks_nn1, MedHHInc, pctBachelors, pool, 
+                             singlefamily, pctOwnerHH))
+summary(reg5)
 
 
 #Mean Absolute Error (Hannah's attempt at following Chaper 4)
