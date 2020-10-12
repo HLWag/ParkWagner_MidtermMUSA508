@@ -17,6 +17,7 @@ library(broom.mixed)
 library(osmdata)
 library(geosphere)
 library(tidycensus)
+library(kableExtra)
 
 # functions
 mapTheme <- function(base_size = 12) {
@@ -173,10 +174,15 @@ MiamiProperties <-
 
 hist(MiamiProperties$CoastDist)
 
+
 ##Convert Miami Data to Local Projection #st_transform('ESRI:102658')
 MiamiProperties <-
   MiamiProperties%>%
   st_transform('ESRI:102658')
+
+MiamiProperties<-
+  MiamiProperties%>%
+  mutate(milecoast=ifelse(CoastDist<1,"Yes","No"))
 
 ## Add Data on Bars, pubs, and restaurants
 bars <- opq(bbox = c(xmin, ymin, xmax, ymax)) %>% 
@@ -405,8 +411,11 @@ MiamiProperties$SalesPrice.Buffer =
   pull(counter)
 
 ###### BUILD REGRESSION MODELS ######
-
-#do we split the data into the training test and the test set before or after we build our regression models?
+MiamiPropertiesAll<-MiamiProperties
+  
+MiamiProperties<-
+  MiamiProperties%>%
+  filter(toPredict == 0)
 
 reg1 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
             dplyr::select(SalePrice, Bed, Bath, Stories, YearBuilt, LivingSqFt, Mailing.Zip, bars_nn5, CoastDist, parks_nn5))
@@ -466,10 +475,11 @@ summ(reg_h)
 summary(reg_h)
 
 reg_best<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-               dplyr::select(SalePrice, pool, singlefamily,CoastDist,
-                             LivingSqFt, parks_nn1, bars_nn1, crime_nn1, MedHHInc, 
-                             MedRent, pctBachelors, pctCarCommute, pctPubCommute, pctOwnerHH, Property.Zip))
+               dplyr::select(SalePrice, LotSize, Bed, Bath, EffectiveYearBuilt, 
+                             ActualSqFt, parks_nn1, MedHHInc, pctBachelors, pool, 
+                             singlefamily, pctOwnerHH, crime_nn5, milecoast))
 summary(reg_best)
+
 
 ##### CORRELATION #####
 #Seleting between multiple nn variables:
@@ -615,7 +625,8 @@ miami.base_map<-
   st_transform('ESRI:102658')
 elem_map<-
   elementary.school.boundaries%>%
-  st_crop(miami.base_map)
+  st_crop(miami.base_map)%>%
+  rename(elem_name=NAME)
 ggplot()+
   geom_sf(data=all_nhoods, fill="grey40")+
   geom_sf(data=elem_map, color="orange", fill="transparent")+
@@ -671,45 +682,222 @@ reg5 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>%
 summary(reg5)
 
 
-#Mean Absolute Error (Hannah's attempt at following Chaper 4)
-inTrain <- createDataPartition(
-  y = paste(MiamiProperties$TOD, MiamiProperties$pool, MiamiProperties$singlefamily, MiamiProperties$Property.Zip, MiamiProperties$Neighborhood, MiamiProperties$elem_name), 
+reg_final <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+             dplyr::select(SalePrice, LotSize, Bed, Bath, EffectiveYearBuilt, 
+                           ActualSqFt, parks_nn1, MedHHInc, pctBachelors, pool, 
+                           singlefamily, pctOwnerHH, crime_nn5, milecoast))
+summary(reg_final)
+
+
+reg_best<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+               dplyr::select(SalePrice, pool, singlefamily,CoastDist,
+                             LivingSqFt, parks_nn1, bars_nn1, crime_nn1, MedHHInc, 
+                             MedRent, pctBachelors, pctCarCommute, pctPubCommute, pctOwnerHH))
+summary(reg_best)
+
+# set random seed
+set.seed(31337)
+
+# get index for training sample
+inTrain <- caret::createDataPartition(
+  y = paste(MiamiProperties$Neighborhood),
   p = .60, list = FALSE)
+# split data into training and test HLW Note: square bracket mean index by row (left entry) and index by column (second entry) negative means opposite
 Miami.training <- MiamiProperties[inTrain,] 
-Miami.test <- MiamiProperties[-inTrain,]  
+Miami.test     <- MiamiProperties[-inTrain,]  
 
-reg.training <- lm(SalePrice ~ ., data = st_drop_geometry(Miami.training) %>% 
-                     dplyr::select(SalePrice, pool, singlefamily, TOD, YearBuilt,
-                                   LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5, crime_nn1))
+#Regression
+reg_final_train <- lm(SalePrice ~ ., data = st_drop_geometry(Miami.training) %>% 
+                  dplyr::select(SalePrice, LotSize, Bed, Bath, EffectiveYearBuilt, 
+                                ActualSqFt, parks_nn1, pctBachelors, pool, 
+                                singlefamily, pctOwnerHH, crime_nn5, milecoast))
 
-Miami.test <-
-  Miami.test %>%
-  mutate(SalePrice.Predict = predict(reg.training, Miami.test),
-         SalePrice.Error = SalePrice.Predict - SalePrice,
-         SalePrice.AbsError = abs(SalePrice.Predict - SalePrice),
-         SalePrice.APE = (abs(SalePrice.Predict - SalePrice)) / SalePrice.Predict)%>%
-  filter(SalePrice < 5000000)
+plot(x = predict(reg_final_train), y = Miami.training$SalePrice)
+# Run this a number of times to see Adjusted R2
 
-mean(Miami.test$SalePrice.AbsError, na.rm = T)
-mean(Miami.test$SalePrice.APE, na.rm = T)
+## predicting on new data
+reg_final_predict <- predict(reg_final_train, newdata = Miami.test)
+
+
+## Mean Square Error train and test
+rmse.train <- caret::MAE(predict(reg_final_train), Miami.training$SalePrice)
+rmse.test  <- caret::MAE(reg_final_predict, Miami.test$SalePrice)
+
+cat("Train MAE: ", as.integer(rmse.train), " \n","Test MAE: ", as.integer(rmse.test))
+
+#Plotting accuracy metrics
+preds.train <- data.frame(pred   = predict(reg_final_train),
+                          actual = Miami.training$SalePrice,
+                          source = "training data")
+preds.test  <- data.frame(pred   = reg_final_predict,
+                          actual = Miami.test$SalePrice,
+                          source = "testing data")
+preds <- rbind(preds.train, preds.test)
+
+ggplot(preds, aes(x = pred, y = actual, color = source)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = "green") +
+  geom_abline(color = "orange") +
+  coord_equal() +
+  theme_bw() +
+  facet_wrap(~source, ncol = 2) +
+  labs(title = "Comparing predictions to actual values",
+       x = "Predicted Value",
+       y = "Actual Value") +
+  theme(
+    legend.position = "none"
+  )
 
 #Generalizability - cross validation
-fitControl <- trainControl(method = "cv", number = 100)
+fitControl <- trainControl(method = "cv", number = 20, savePredictions = TRUE)
 set.seed(825)
 
 reg.cv <- 
   train(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-          dplyr::select(SalePrice, pool, singlefamily, TOD, YearBuilt,
-                        LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5, crime_nn1), 
+          dplyr::select(SalePrice, LotSize, Bed, Bath, EffectiveYearBuilt, 
+                        ActualSqFt, parks_nn1, pctBachelors, pool, 
+                        singlefamily, pctOwnerHH, crime_nn5, milecoast), 
         method = "lm", trControl = fitControl, na.action = na.pass)
 
 reg.cv
 
+reg.cv$resample
 
-#Accounting for Neighborhood or Elem School (or both?)
+reg.cv$resample %>% 
+  pivot_longer(-Resample) %>% 
+  mutate(name = as.factor(name)) %>% 
+  ggplot(., aes(x = name, y = value, color = name)) +
+  geom_jitter(width = 0.1) +
+  facet_wrap(~name, ncol = 3, scales = "free") +
+  theme_bw() +
+  theme(
+    legend.position = "none"
+  )
+
+# extract predictions from CV object
+cv_preds <- reg.cv$pred
+nrow(MiamiProperties)
+nrow(cv_preds)
+
+#Create dataset with "out of fold" predictions and original data
+map_preds <- MiamiProperties %>% 
+  rowid_to_column(var = "rowIndex") %>% 
+  left_join(cv_preds, by = "rowIndex") %>% 
+  mutate(SalePrice.AbsError = abs(pred - SalePrice)) %>% 
+  cbind(st_coordinates(st_centroid((.))))
+
+st_crs(map_preds) <- st_crs(all_nhoods)
+
+# plot errors on a map
+ggplot() +
+  geom_sf(data = all_nhoods, fill = "grey40") +
+  geom_sf(data = map_preds, aes(colour = q5(SalePrice.AbsError)),
+          show.legend = "point", size = 1) +
+  scale_colour_manual(values = palette5,
+                      labels=qBr(map_preds,"SalePrice.AbsError"),
+                      name="Quintile\nBreaks") +
+  labs(title="Absolute sale price errors on the OOF set",
+       subtitle = "OOF = 'Out Of Fold'") +
+  mapTheme()
+
+#Start Ch4
+k_nearest_neighbors = 5
+#prices
+coords <- st_coordinates(st_centroid(MiamiProperties)) 
+# k nearest neighbors
+neighborList <- knn2nb(knearneigh(coords, k_nearest_neighbors))
+spatialWeights <- nb2listw(neighborList, style="W")
+MiamiProperties$lagPrice <- lag.listw(spatialWeights, MiamiProperties$SalePrice)
+
+
+#errors
+Miami.test <-
+  Miami.test %>%
+  mutate(Regression = "Baseline Regression",
+         SalePrice.Predict = predict(reg.training, Miami.test),
+         SalePrice.Error = SalePrice.Predict - SalePrice,
+         SalePrice.AbsError = abs(SalePrice.Predict - SalePrice),
+         SalePrice.APE = (abs(SalePrice.Predict - SalePrice)) / SalePrice.Predict)%>%
+  mutate(SalePrice.AbsError = replace_na(SalePrice.AbsError, 0))%>%
+  mutate(SalePrice.Error=replace_na(SalePrice.Error, 0))%>%
+  filter(SalePrice < 5000000)
+
+coords.test <-  st_coordinates(st_centroid(Miami.test)) 
+neighborList.test <- knn2nb(knearneigh(coords.test, k_nearest_neighbors))
+spatialWeights.test <- nb2listw(neighborList.test, style="W")
+Miami.test$lagPriceError <- lag.listw(spatialWeights.test, Miami.test$SalePrice.AbsError)
+
+summary(Miami.test$SalePrice.AbsError)
+
+Miami.test %>% 
+  mutate(lagPriceError = lag.listw(spatialWeights.test, SalePrice.AbsError))
+
+ggplot(MiamiProperties, aes(x=lagPrice, y=SalePrice)) +
+  geom_point(colour = "#FA7800") +
+  geom_smooth(method = "lm", se = FALSE, colour = "#25CB10") +
+  labs(title = "Price as a function of the spatial lag of price",
+       caption = "Public Policy Analytics, Figure 6.6",
+       x = "Spatial lag of price (Mean price of 5 nearest neighbors)",
+       y = "Sale Price") +
+  plotTheme()
+
+ggplot(Miami.test, aes(x=lagPriceError, y=SalePrice)) +
+  geom_point(colour = "#FA7800") +
+  geom_smooth(method = "lm", se = FALSE, colour = "#25CB10") +
+  labs(title = "Error as a function of the spatial lag of price",
+       caption = "",
+       x = "Spatial lag of errors (Mean error of 5 nearest neighbors)",
+       y = "Sale Price") +
+  plotTheme()
+
+
+#Moran's I - A measure of spatial correlation
+moranTest <- moran.mc(Miami.test$SalePrice.AbsError, 
+                      spatialWeights.test, nsim = 999)
+
+ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
+  geom_histogram(binwidth = 0.01) +
+  geom_vline(aes(xintercept = moranTest$statistic), colour = "#FA7800",size=1) +
+  scale_x_continuous(limits = c(-1, 1)) +
+  labs(title="Observed and permuted Moran's I",
+       subtitle= "Observed Moran's I in orange",
+       x="Moran's I",
+       y="Count",
+       caption="Miami") +
+  plotTheme()
+
+
+#Errors by group - Neighborhood, Elementary School
+##Neighborhood
+nhood_sum <- Miami.test %>% 
+  group_by(Neighborhood) %>%
+  summarize(meanPrice = mean(SalePrice, na.rm = T),
+            meanPrediction = mean(SalePrice.Predict, na.rm = T),
+            meanMAE = mean(SalePrice.AbsError, na.rm = T))
+
+nhood_sum %>% 
+  st_drop_geometry %>%
+  arrange(desc(meanMAE)) %>% 
+  kable() %>% kable_styling()
+
+map_preds_sum <- map_preds %>% 
+  group_by(Neighborhood) %>% 
+  summarise(meanMAE = mean(SalePrice.AbsError))
+
+ggplot() +
+  geom_sf(data = all_nhoods %>% 
+            left_join(st_drop_geometry(map_preds_sum), by = "Neighborhood"),
+          aes(fill = q5(meanMAE))) +
+  scale_fill_manual(values = palette5,
+                    labels=qBr(nhood_sum,"meanMAE"),
+                    name="Quintile\nBreaks") +
+  mapTheme() +
+  labs(title="Absolute sale price errors on the OOF set by Neighborhood")
+
 reg.nhood <- lm(SalePrice ~ ., data = as.data.frame(Miami.training) %>% 
-                  dplyr::select(Neighborhood, SalePrice, pool, singlefamily, TOD, YearBuilt,
-                                LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5, crime_nn1))
+                  dplyr::select(Neighborhood, SalePrice, LotSize, Bed, Bath, EffectiveYearBuilt, 
+                                ActualSqFt, parks_nn1, pctBachelors, pool, 
+                                singlefamily, pctOwnerHH, crime_nn5, milecoast))
 
 Miami.test.nhood <-
   Miami.test %>%
@@ -717,10 +905,198 @@ Miami.test.nhood <-
          SalePrice.Predict = predict(reg.nhood, Miami.test),
          SalePrice.Error = SalePrice - SalePrice.Predict,
          SalePrice.AbsError = abs(SalePrice - SalePrice.Predict),
-         SalePrice.APE = (abs(SalePrice - SalePrice.Predict)) / SalePrice)%>%
+         SalePrice.APE = (abs(SalePrice - SalePrice.Predict)) / SalePrice) %>%
+  mutate(SalePrice.AbsError = replace_na(SalePrice.AbsError, 0))%>%
+  mutate(SalePrice.Error=replace_na(SalePrice.Error, 0))%>%
   filter(SalePrice < 5000000)
 
-summary(reg.nhood)
+bothRegressions <- 
+  rbind(
+    dplyr::select(Miami.test, starts_with("SalePrice"), Regression, Neighborhood) %>%
+      mutate(lagPriceError = lag.listw(spatialWeights.test, SalePrice.Error)),
+    dplyr::select(Miami.test.nhood, starts_with("SalePrice"), Regression, Neighborhood) %>%
+      mutate(lagPriceError = lag.listw(spatialWeights.test, SalePrice.Error)))    
 
 
+st_drop_geometry(bothRegressions) %>%
+  gather(Variable, Value, -Regression, -Neighborhood) %>%
+  filter(Variable == "SalePrice.AbsError" | Variable == "SalePrice.APE") %>%
+  group_by(Regression, Variable) %>%
+  summarize(meanValue = mean(Value, na.rm = T)) %>%
+  spread(Variable, meanValue) %>%
+  kable() %>%
+  kable_styling("striped", full_width = F) %>%
+  row_spec(1, color = "black", background = "#25CB10") %>%
+  row_spec(2, color = "black", background = "#FA7800")
 
+bothRegressions %>%
+  dplyr::select(SalePrice.Predict, SalePrice, Regression) %>%
+  ggplot(aes(SalePrice, SalePrice.Predict)) +
+  geom_point() +
+  stat_smooth(aes(SalePrice, SalePrice), 
+              method = "lm", se = FALSE, size = 1, colour="#FA7800") + 
+  stat_smooth(aes(SalePrice.Predict, SalePrice), 
+              method = "lm", se = FALSE, size = 1, colour="#25CB10") +
+  facet_wrap(~Regression) +
+  labs(title="Predicted sale price as a function of observed price",
+       subtitle="Orange line represents a perfect prediction; Green line represents prediction") +
+  plotTheme() + theme(plot.title = element_text(size = 18, colour = "black")) 
+
+#map MAPE by neighborhoods
+st_drop_geometry(bothRegressions) %>%
+  group_by(Regression, Neighborhood) %>%
+  summarize(mean.MAPE = mean(SalePrice.APE, na.rm = T)) %>%
+  ungroup() %>% 
+  left_join(all_nhoods) %>%
+  st_sf() %>%
+  ggplot() + 
+  geom_sf(aes(fill = mean.MAPE)) +
+  geom_sf(data = bothRegressions, colour = "black", size = .5) +
+  facet_wrap(~Regression) +
+  scale_fill_gradient(low = palette5[1], high = palette5[5],
+                      name = "MAPE") +
+  labs(title = "Mean test set MAPE by neighborhood") +
+  mapTheme()
+
+
+#Race Context and Income Context (from book)
+tracts18 <- 
+  tracts18%>%
+  mutate(raceContext = ifelse(pctWhite > .5, "Majority White", "Majority Non-White"),
+         incomeContext = ifelse(MedInc > 32322, "High Income", "Low Income"))
+
+grid.arrange(ncol = 2,
+             ggplot() + geom_sf(data = na.omit(tracts18), aes(fill = raceContext)) +
+               scale_fill_manual(values = c("#25CB10", "#FA7800"), name="Race Context") +
+               labs(title = "Race Context") +
+               mapTheme() + theme(legend.position="bottom"), 
+             ggplot() + geom_sf(data = na.omit(tracts18), aes(fill = incomeContext)) +
+               scale_fill_manual(values = c("#25CB10", "#FA7800"), name="Income Context") +
+               labs(title = "Income Context") +
+               mapTheme() + theme(legend.position="bottom"))
+
+st_join(bothRegressions, tracts18) %>% 
+  group_by(Regression, raceContext) %>%
+  summarize(mean.MAPE = scales::percent(mean(SalePrice.APE, na.rm = T))) %>%
+  st_drop_geometry() %>%
+  spread(raceContext, mean.MAPE) %>%
+  kable(caption = "Test set MAPE by neighborhood racial context")
+
+st_join(bothRegressions, tracts18) %>% 
+  filter(!is.na(incomeContext)) %>%
+  group_by(Regression, incomeContext) %>%
+  summarize(mean.MAPE = scales::percent(mean(SalePrice.APE, na.rm = T))) %>%
+  st_drop_geometry() %>%
+  spread(incomeContext, mean.MAPE) %>%
+  kable(caption = "Test set MAPE by neighborhood income context")
+
+##Elementary School
+elem_sum <- Miami.test %>% 
+  group_by(elem_name) %>%
+  summarize(meanPrice = mean(SalePrice, na.rm = T),
+            meanPrediction = mean(SalePrice.Predict, na.rm = T),
+            meanMAE = mean(SalePrice.AbsError, na.rm = T))
+
+elem_sum %>% 
+  st_drop_geometry %>%
+  arrange(desc(meanMAE)) %>% 
+  kable() %>% kable_styling()
+
+map_preds_sum_elem <- map_preds %>% 
+  group_by(elem_name) %>% 
+  summarise(meanMAE = mean(SalePrice.AbsError))
+
+ggplot() +
+  geom_sf(data = elem_map %>% 
+            left_join(st_drop_geometry(map_preds_sum_elem), by = "elem_name"),
+          aes(fill = q5(meanMAE))) +
+  scale_fill_manual(values = palette5,
+                    labels=qBr(nhood_sum,"meanMAE"),
+                    name="Quintile\nBreaks") +
+  mapTheme() +
+  labs(title="Absolute sale price errors on the OOF set by Elementary School District")
+
+
+reg.elem <- lm(SalePrice ~ ., data = as.data.frame(Miami.training) %>% 
+                  dplyr::select(elem_name, SalePrice, LotSize, Bed, Bath, EffectiveYearBuilt, 
+                                ActualSqFt, parks_nn1, pctBachelors, pool, 
+                                singlefamily, pctOwnerHH, crime_nn5, milecoast))
+
+Miami.test.elem <-
+  Miami.test %>%
+  mutate(Regression = "Elementary School Effects",
+         SalePrice.Predict = predict(reg.elem, Miami.test),
+         SalePrice.Error = SalePrice - SalePrice.Predict,
+         SalePrice.AbsError = abs(SalePrice - SalePrice.Predict),
+         SalePrice.APE = (abs(SalePrice - SalePrice.Predict)) / SalePrice) %>%
+  mutate(SalePrice.AbsError = replace_na(SalePrice.AbsError, 0))%>%
+  mutate(SalePrice.Error=replace_na(SalePrice.Error, 0))%>%
+  filter(SalePrice < 5000000)
+
+threeRegressions <- 
+  rbind(
+    dplyr::select(Miami.test, starts_with("SalePrice"), Regression, Neighborhood, elem_name) %>%
+      mutate(lagPriceError = lag.listw(spatialWeights.test, SalePrice.Error)),
+    dplyr::select(Miami.test.nhood, starts_with("SalePrice"), Regression, Neighborhood, elem_name) %>%
+      mutate(lagPriceError = lag.listw(spatialWeights.test, SalePrice.Error)),
+    dplyr::select(Miami.test.elem, starts_with("SalePrice"), Regression, Neighborhood, elem_name) %>%
+      mutate(lagPriceError = lag.listw(spatialWeights.test, SalePrice.Error))) 
+
+
+st_drop_geometry(threeRegressions) %>%
+  gather(Variable, Value, -Regression, -Neighborhood,-elem_name) %>%
+  filter(Variable == "SalePrice.AbsError" | Variable == "SalePrice.APE") %>%
+  group_by(Regression, Variable) %>%
+  summarize(meanValue = mean(Value, na.rm = T)) %>%
+  spread(Variable, meanValue) %>%
+  kable() %>%
+  kable_styling("striped", full_width = F) %>%
+  row_spec(1, color = "black", background = "#25CB10") %>%
+  row_spec(2, color = "black", background = "#FA7800") %>%
+  row_spec(3, color="black", background = "#0082FA")
+
+threeRegressions %>%
+  dplyr::select(SalePrice.Predict, SalePrice, Regression) %>%
+  ggplot(aes(SalePrice, SalePrice.Predict)) +
+  geom_point() +
+  stat_smooth(aes(SalePrice, SalePrice), 
+              method = "lm", se = FALSE, size = 1, colour="#FA7800") + 
+  stat_smooth(aes(SalePrice.Predict, SalePrice), 
+              method = "lm", se = FALSE, size = 1, colour="#25CB10") +
+  facet_wrap(~Regression) +
+  labs(title="Predicted sale price as a function of observed price",
+       subtitle="Orange line represents a perfect prediction; Green line represents prediction") +
+  plotTheme() + theme(plot.title = element_text(size = 18, colour = "black")) 
+
+#map MAPE by neighborhoods (need to figure out how to add the elementary school basemap in here)
+st_drop_geometry(threeRegressions) %>%
+  group_by(Regression, Neighborhood, elem_name) %>%
+  summarize(mean.MAPE = mean(SalePrice.APE, na.rm = T)) %>%
+  ungroup() %>% 
+  left_join(all_nhoods) %>%
+  st_sf() %>%
+  ggplot() + 
+  geom_sf(aes(fill = mean.MAPE)) +
+  geom_sf(data = bothRegressions, colour = "black", size = .5) +
+  facet_wrap(~Regression) +
+  scale_fill_gradient(low = palette5[1], high = palette5[5],
+                      name = "MAPE") +
+  labs(title = "Mean test set MAPE by neighborhood") +
+  mapTheme()
+
+
+#Race Context and Income Context (from book)
+st_join(threeRegressions, tracts18) %>% 
+  group_by(Regression, raceContext) %>%
+  summarize(mean.MAPE = scales::percent(mean(SalePrice.APE, na.rm = T))) %>%
+  st_drop_geometry() %>%
+  spread(raceContext, mean.MAPE) %>%
+  kable(caption = "Test set MAPE by neighborhood racial context")
+
+st_join(threeRegressions, tracts18) %>% 
+  filter(!is.na(incomeContext)) %>%
+  group_by(Regression, incomeContext) %>%
+  summarize(mean.MAPE = scales::percent(mean(SalePrice.APE, na.rm = T))) %>%
+  st_drop_geometry() %>%
+  spread(incomeContext, mean.MAPE) %>%
+  kable(caption = "Test set MAPE by neighborhood income context")
