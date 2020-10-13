@@ -119,6 +119,8 @@ nn_function <- function(measureFrom,measureTo,k) {
 }
 ```
 
+
+### 2.3 loading basemap
 ```{r}
 # Loading Miami base map from OSM Data
 miami.base <- 
@@ -137,6 +139,8 @@ ggplot() +
   geom_sf(data=st_as_sfc(st_bbox(miami.base)), colour="coral4", fill=NA) 
 ```
 
+
+### 2.4 loading the main data/ 
 ```{r, message=FALSE, warning=FALSE}
 MiamiProperties <-
   #st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")%>%

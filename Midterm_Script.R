@@ -32,7 +32,7 @@ mapTheme <- function(base_size = 12) {
     axis.title.x = element_blank(),
     axis.title.y = element_blank(),
     panel.grid.minor = element_blank(),
-    panel.border = element_rect(colour = "black", fill=NA, size=2)
+    panel.border = element_rect(colour = "navy", fill=NA, size=1)
   )
 }
 
@@ -113,7 +113,9 @@ ggplot() +
 # Loading elementary school boundaries 
 elementary.school.boundaries <- 
   st_read("https://opendata.arcgis.com/datasets/19f5d8dcd9714e6fbd9043ac7a50c6f6_0.geojson") %>%
-  st_transform('ESRI:102658')
+  st_transform('ESRI:102658') %>%
+  filter(CITY == "MIAMI" | CITY == "MIAMI BEACH")  
+
 
 #Neighborhood Data
 neighborhood<-
@@ -133,6 +135,7 @@ mapview::mapview(muni_boundary)
 
 all_nhoods<-
   rbind(neighborhood,muni_boundary)
+mapview::mapview(all_nhoods)
 
 # Read in Property Data (note that these are centroids, may need to convert to points for some analyses)
 MiamiProperties_original <-
@@ -149,8 +152,8 @@ MiamiProperties <-
   
   mutate(pool = ifelse(str_detect(XF1, "Pool"), "Pool", "No Pool")) %>% 
   mutate(singlefamily = ifelse(str_detect(Zoning, "SINGLE FAMILY"), "Yes", "No")) %>%
-  dplyr::select(-saleDate, -saleType, -saleQual, -County.Senior, -County.LongTermSenior, -County.Other.Exempt, -Owner1, -Owner2, 
-                -Mailing.Address, -Mailing.City, -Mailing.State, -Mailing.Zip, -Mailing.Country, 
+  dplyr::select(-Land, -Year,-Bldg, -Total, -Assessed,  -saleDate, -saleType, -saleQual, -County.Senior, -County.LongTermSenior, -County.Other.Exempt, -Owner1, -Owner2, 
+                -Mailing.Address, -Mailing.City, -Mailing.State, -Mailing.Zip, -Mailing.Country, -YearBuilt,
                 -City.Senior, -City.LongTermSenior, -City.Other.Exempt, -Legal1, -Legal2, -Legal3, -Legal4, -Legal5, -Legal6, -XF1, -XF2, -XF3,
                 -WVDB, -HEX, -GPAR, -County.2nd.HEX, -City.2nd.HEX, -MillCode, -Zoning, -Land.Use)
 
@@ -161,10 +164,6 @@ st_crs(MiamiProperties)
 Coastline<-opq(bbox = c(xmin, ymin, xmax, ymax)) %>% 
   add_osm_feature("natural", "coastline") %>%
   osmdata_sf()
-
-###test in meters
-dist<-geosphere::dist2Line(p=st_coordinates(st_centroid(MiamiProperties)),
-                                            line=st_coordinates(Coastline$osm_lines)[,1:2])
 
 ### add to MiamiProperties and convert to miles
 MiamiProperties <-
@@ -404,84 +403,7 @@ MiamiProperties$parks.Buffer =
 MiamiProperties <- MiamiProperties %>%
   mutate(parks.Buffer = replace_na(parks.Buffer, 0))
 
-### nn for sale price
-MiamiProperties$SalesPrice.Buffer =
-  st_buffer(MiamiProperties, 1320) %>%
-  aggregate(mutate(dplyr::select(SalesPrice), counter = 1),., mean) %>%
-  pull(counter)
-
-###### BUILD REGRESSION MODELS ######
-MiamiPropertiesAll<-MiamiProperties
-  
-MiamiProperties<-
-  MiamiProperties%>%
-  filter(toPredict == 0)
-
-reg1 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-            dplyr::select(SalePrice, Bed, Bath, Stories, YearBuilt, LivingSqFt, Mailing.Zip, bars_nn5, CoastDist, parks_nn5))
-summ(reg1)
-summary(reg1)
-
-
-#Hannah's Regressions
-reg_a<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-            dplyr::select(SalePrice, YearBuilt, LivingSqFt, Stories, Bed, Bath, CoastDist, TOD, pool, singlefamily, bars_nn1, crime_nn1, parks_nn1))
-summ(reg_a)
-summary(reg_a)
-
-
-reg_b<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, 
-                          TOD, pool, singlefamily, bars_nn1, crime_nn1, parks_nn1))
-summ(reg_b)
-summary(reg_b)
-
-
-reg_c<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, 
-                          TOD, pool, singlefamily, bars_nn5, crime_nn5, parks_nn5))
-summ(reg_c)
-summary(reg_c)
-
-
-reg_d<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, 
-                          pool, singlefamily, bars_nn5, crime_nn5, parks_nn5, metro_nn1))
-summ(reg_d)
-summary(reg_d)
-
-reg_e<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, 
-                          pool, singlefamily, bars_nn5, crime_nn5, parks_nn5, metro_nn1, elem_name))
-summ(reg_e)
-summary(reg_e)
-
-reg_f<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-            dplyr::select(SalePrice, Bed, Bath, Stories, YearBuilt, 
-                          LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5))
-summ(reg_f)
-summary(reg_f)
-
-reg_g<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-            dplyr::select(SalePrice, pool, singlefamily, TOD, YearBuilt,
-                          LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5, elem_name))
-summ(reg_g)
-summary(reg_g)
-
-reg_h<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-            dplyr::select(SalePrice, pool, singlefamily, TOD, YearBuilt,
-                          LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5, elem_name, Neighborhood))
-summ(reg_h)
-summary(reg_h)
-
-reg_best<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-               dplyr::select(SalePrice, LotSize, Bed, Bath, EffectiveYearBuilt, 
-                             ActualSqFt, parks_nn1, MedHHInc, pctBachelors, pool, 
-                             singlefamily, pctOwnerHH, crime_nn5, milecoast))
-summary(reg_best)
-
-
-##### CORRELATION #####
+##### EXPLORE VARIABLES #####
 #Seleting between multiple nn variables:
 st_drop_geometry(MiamiProperties) %>% 
   dplyr::select(SalePrice, crime_nn1, crime_nn2, crime_nn3, crime_nn4, crime_nn5, sexualoffenders_Buffer) %>%
@@ -524,7 +446,7 @@ st_drop_geometry(MiamiProperties) %>%
 
 #Price as a function of categorical variables
 st_drop_geometry(MiamiProperties) %>%
-  dplyr::select(SalePrice, TOD, Stories, pool, singlefamily)%>%
+  dplyr::select(SalePrice, Halfmile_metro, Stories, pool, singlefamily)%>%
   filter(SalePrice <= 1000000) %>%
   gather(Variable,Value, -SalePrice)%>%
   ggplot(aes(Value, SalePrice))+
@@ -532,6 +454,8 @@ st_drop_geometry(MiamiProperties) %>%
   facet_wrap(~Variable, ncol=1, scales="free")+
   plotTheme()
 
+
+##### CORRELATIONS #####
 #Correlation Matrix
 numericVars <- 
   select_if(st_drop_geometry(MiamiProperties), is.numeric) %>% na.omit()
@@ -639,7 +563,78 @@ ggplot()+
   mapTheme()
 
 
-#######
+###### BUILD REGRESSION MODELS ######
+MiamiPropertiesAll<-MiamiProperties
+
+#filter out the houses that we will need to predict
+MiamiProperties<-
+  MiamiProperties%>%
+  filter(toPredict == 0)
+
+
+
+reg1 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+             dplyr::select(SalePrice, Bed, Bath, Stories, YearBuilt, LivingSqFt, Mailing.Zip, bars_nn5, CoastDist, parks_nn5))
+summ(reg1)
+summary(reg1)
+
+
+#Hannah's Regressions
+reg_a<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, YearBuilt, LivingSqFt, Stories, Bed, Bath, CoastDist, TOD, pool, singlefamily, bars_nn1, crime_nn1, parks_nn1))
+summ(reg_a)
+summary(reg_a)
+
+
+reg_b<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, 
+                          TOD, pool, singlefamily, bars_nn1, crime_nn1, parks_nn1))
+summ(reg_b)
+summary(reg_b)
+
+
+reg_c<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, 
+                          TOD, pool, singlefamily, bars_nn5, crime_nn5, parks_nn5))
+summ(reg_c)
+summary(reg_c)
+
+
+reg_d<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, 
+                          pool, singlefamily, bars_nn5, crime_nn5, parks_nn5, metro_nn1))
+summ(reg_d)
+summary(reg_d)
+
+reg_e<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, YearBuilt, LivingSqFt, CoastDist, 
+                          pool, singlefamily, bars_nn5, crime_nn5, parks_nn5, metro_nn1, elem_name))
+summ(reg_e)
+summary(reg_e)
+
+reg_f<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, Bed, Bath, Stories, YearBuilt, 
+                          LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5))
+summ(reg_f)
+summary(reg_f)
+
+reg_g<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, pool, singlefamily, TOD, YearBuilt,
+                          LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5, elem_name))
+summ(reg_g)
+summary(reg_g)
+
+reg_h<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+            dplyr::select(SalePrice, pool, singlefamily, TOD, YearBuilt,
+                          LivingSqFt, Property.Zip, bars_nn5, CoastDist, parks_nn5, elem_name, Neighborhood))
+summ(reg_h)
+summary(reg_h)
+
+reg_best<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+               dplyr::select(SalePrice, LotSize, Bed, Bath, EffectiveYearBuilt, 
+                             ActualSqFt, parks_nn1, MedHHInc, pctBachelors, pool, 
+                             singlefamily, pctOwnerHH, crime_nn5, milecoast))
+summary(reg_best)
 # 1. run with all variables
 reg2 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
              dplyr::select(SalePrice, LotSize, Bed, Bath, Stories, YearBuilt, LivingSqFt, ActualSqFt,
@@ -682,6 +677,12 @@ reg5 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>%
 summary(reg5)
 
 
+reg_test <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+                 dplyr::select(SalePrice, LotSize, Bed, Bath, EffectiveYearBuilt, 
+                               ActualSqFt, parks_nn1, MedHHInc, pctBlack, pctHis, pctBachelors, pool, 
+                               singlefamily, pctOwnerHH, crime_nn5, milecoast))
+
+
 reg_final <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
              dplyr::select(SalePrice, LotSize, Bed, Bath, EffectiveYearBuilt, 
                            ActualSqFt, parks_nn1, MedHHInc, pctBachelors, pool, 
@@ -694,6 +695,9 @@ reg_best<-lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>%
                              LivingSqFt, parks_nn1, bars_nn1, crime_nn1, MedHHInc, 
                              MedRent, pctBachelors, pctCarCommute, pctPubCommute, pctOwnerHH))
 summary(reg_best)
+
+######### TESTING ########
+
 
 # set random seed
 set.seed(31337)
@@ -747,6 +751,9 @@ ggplot(preds, aes(x = pred, y = actual, color = source)) +
   theme(
     legend.position = "none"
   )
+
+
+########### CROSS- VALIDATION ##########
 
 #Generalizability - cross validation
 fitControl <- trainControl(method = "cv", number = 20, savePredictions = TRUE)
