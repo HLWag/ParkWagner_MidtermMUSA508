@@ -151,6 +151,7 @@ MiamiProperties <-
   
   mutate(pool = ifelse(str_detect(XF1, "Pool"), "Pool", "No Pool")) %>% 
   mutate(singlefamily = ifelse(str_detect(Zoning, "SINGLE FAMILY"), "Yes", "No")) %>%
+  mutate(Age = (2020 - EffectiveYearBuilt),0) %>%
   dplyr::select(-Land, -Year,-Bldg, -Total, -Assessed,  -saleDate, -saleType, -saleQual, -County.Senior, -County.LongTermSenior, -County.Other.Exempt, -Owner1, -Owner2, 
                 -Mailing.Address, -Mailing.City, -Mailing.State, -Mailing.Zip, -Mailing.Country, -YearBuilt,
                 -City.Senior, -City.LongTermSenior, -City.Other.Exempt, -Legal1, -Legal2, -Legal3, -Legal4, -Legal5, -Legal6, -XF1, -XF2, -XF3,
@@ -347,7 +348,13 @@ selected_vars <- c("B02001_001E", # Estimate!!Total population by race -- ##let'
                    "B07013_002E", # Total owner-occupied households
                    "B07013_003E", # total renter-occupied households
                    "B25027_001E",
-                   "B25027_010E") 
+                   "B25027_010E",
+                   "B25038_002E",
+                   "B25038_003E",
+                   "B25038_004E",
+                   "B25038_005E",
+                   "B19001_017E"
+                   ) 
 
 tracts18 <- 
   get_acs(geography = "tract", 
@@ -375,7 +382,12 @@ tracts18 <-
          OwnerHH = B07013_002E,
          RenterHH = B07013_003E,
          #TotalHH2 = B25027_001E,
-         HHNoMort = B25027_010E) %>%
+         HHNoMort = B25027_010E,
+         Own2017later = B25038_003E,
+         Own201516 = B25038_004E,
+         Own201014 = B25038_005E,
+         HH200k = B19001_017E
+         ) %>%
   dplyr::select(-NAME, -starts_with("B0"), -starts_with("B1"), -starts_with("B2")) %>%
   mutate(pctWhite = (ifelse(TotalPop > 0, Whites / TotalPop,0))*100,
          pctBlack = (ifelse(TotalPop > 0, Blacks / TotalPop,0))*100,
@@ -388,8 +400,11 @@ tracts18 <-
          pctOwnerHH = (ifelse(TotalHH > 0, OwnerHH / TotalHH,0))*100,
          pctRenterHH = (ifelse(TotalHH > 0, RenterHH / TotalHH,0))*100,
          pctNoMortgage = (ifelse(TotalHH > 0, HHNoMort / TotalHH,0))*100,
+         pctOwnerSince2010 = (ifelse(OwnerHH > 0, ((Own2017later + Own201516 + Own201014) / OwnerHH),0)) *100,
+         pctHH200kOrMore = (ifelse(TotalHH > 0, (HH200k/ TotalHH),0))*100,
          year = "2018") %>%
-  mutate(MedHHInc = replace_na(MedHHInc, 0)) %>%
+  mutate(MedHHInc = replace_na(MedHHInc, 0),
+         MedRent = replace_na(MedRent,0)) %>%
   dplyr::select(-Whites, -Blacks, -FemaleBachelors, -MaleBachelors, -TotalPoverty, -CarCommute, -PubCommute, -TotalCommute, -TotalHispanic)
 
 
@@ -577,37 +592,61 @@ MiamiPropertiesAll<-MiamiProperties
 #filter out the houses that we will need to predict
 MiamiProperties<-
   MiamiProperties%>%
-  filter(toPredict == 0) #%>%
-#filter(SalePrice <1000000)
+  filter(toPredict == 0) 
+
+
+hist(MiamiProperties$SalePrice)
+hist(log(MiamiProperties$SalePrice))
+MiamiProperties <-
+  MiamiProperties %>%
+  mutate(logSalePrice = log(SalePrice))
 
 
 
-## initial model
+## initial model all inclusive
+reg1 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+                  dplyr::select(SalePrice, LotSize, Bed, Bath, Age, 
+                                ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
+                                singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
+                                pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist, pctHH200kOrMore))
+summary(reg_initial)
 ## trimmed/ cleaned up model from the inital model
+
 ##stepwise backward function
 step( lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-           dplyr::select(SalePrice, LotSize, Bed, Bath, Stories, EffectiveYearBuilt, ActualSqFt,
-                         sexualoffenders_Buffer, bars_Buffer, parks_nn1, metro_nn1,
-                         MedHHInc, pctBlack, pctHis, pctBlack, pctHis,
-                         pctBachelors, pctPoverty, pool, singlefamily, pctOwnerHH)), direction="backward")
+           dplyr::select(SalePrice, LotSize, Bed, Bath, Age, 
+                         ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
+                         singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
+                         pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist,pctHH200kOrMore)), direction="backward")
 ##output
+reg3 <- step( lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+                           dplyr::select(SalePrice, LotSize, Bed, Bath, Age, 
+                                         ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
+                                         singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
+                                         pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, pctHH200kOrMore)), direction="backward")
+summary(reg3)
+
+#crime_nn5
+reg4 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+                    dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedRent, MedHHInc, pctBlackorHis, pctBachelors, pool, 
+                                  singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, crime_nn5))
+summary(reg4)
+#crime buffer
 reg5 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-             dplyr::select(SalePrice, LotSize, Bed, Bath, Stories, EffectiveYearBuilt, 
-                            ActualSqFt, parks_nn1, MedHHInc, pctBachelors, pool, 
-                             singlefamily, pctOwnerHH))
+             dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedRent, MedHHInc, pctBlackorHis, pctBachelors, pool, 
+                            singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, sexualoffenders_Buffer))
 summary(reg5)
 
-#final model
-reg_final <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-             dplyr::select(SalePrice, LotSize, Bed, Bath, EffectiveYearBuilt, 
-                            ActualSqFt, parks_nn1, MedHHInc, pctBlack, pctHis, pctBachelors, pool, 
-                            singlefamily, pctOwnerHH, crime_nn5, milecoast, pctNoMortgage))
-summary(reg_final)
+
+install.packages("stargazer")
+library(stargazer)
+
+stargazer(reg1, reg3, reg4, reg5, type = "html")
 
 #correlation table with final model numeric vars
 reg_final_vars <- 
-  select(st_drop_geometry(MiamiProperties), SalePrice, LotSize, Bed, Bath, EffectiveYearBuilt, 
-         ActualSqFt, parks_nn1, MedHHInc, pctBlack, pctHis, pctBachelors, pctOwnerHH, crime_nn5) %>% na.omit()
+  select(st_drop_geometry(MiamiProperties), SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedHHInc, pctWhite, pctBachelors, 
+                                            pctOwnerHH, pctCarCommute, pctOwnerSince2010, crime_nn5) %>% na.omit()
 
 ggcorrplot(
   round(cor(reg_final_vars), 1), 
@@ -633,9 +672,8 @@ Miami.test     <- MiamiProperties[-inTrain,]
 
 #Regression
 reg_final_train <- lm(SalePrice ~ ., data = st_drop_geometry(Miami.training) %>% 
-                  dplyr::select(SalePrice, LotSize, EffectiveYearBuilt, 
-                                ActualSqFt, pctBachelors, pool, MedHHInc,
-                                singlefamily, pctOwnerHH, pctWhite, pctBlack, crime_nn5, milecoast, pctNoMortgage))
+                  dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedRent, MedHHInc, pctBlackorHis, pctBachelors, pool, 
+                                singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, sexualoffenders_Buffer))
 
 plot(x = predict(reg_final_train), y = Miami.training$SalePrice)
 # Run this a number of times to see Adjusted R2
