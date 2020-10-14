@@ -144,8 +144,6 @@ MBAreas<-st_read("https://opendata.arcgis.com/datasets/a21e846f4e8e4d81ad3b75bc4
   st_transform('ESRI:102658')%>%
   dplyr::select(FID)%>%
   rename(Neighborhood=FID)
-  
-st_crs(MBAreas)
 
 all_nhoods_MB<-
   rbind(neighborhood,MBAreas)%>%
@@ -382,7 +380,6 @@ selected_vars <- c("B02001_001E", # Estimate!!Total population by race -- ##let'
                    "B25038_003E",
                    "B25038_004E",
                    "B25038_005E",
-                   "B19001_017E") 
                    "B19001_017E"
                    )
 
@@ -417,8 +414,6 @@ tracts18 <-
          Own201516 = B25038_004E,
          Own201014 = B25038_005E,
          HH200k = B19001_017E) %>%
-         HH200k = B19001_017E
-         )%>%
   dplyr::select(-NAME, -starts_with("B0"), -starts_with("B1"), -starts_with("B2")) %>%
   mutate(pctWhite = (ifelse(TotalPop > 0, Whites / TotalPop,0))*100,
          pctBlack = (ifelse(TotalPop > 0, Blacks / TotalPop,0))*100,
@@ -454,7 +449,15 @@ MiamiProperties$parks.Buffer =
 MiamiProperties <- MiamiProperties %>%
   mutate(parks.Buffer = replace_na(parks.Buffer, 0))
 
+
 ##### EXPLORE VARIABLES #####
+MiamiPropertiesAll<-MiamiProperties
+
+#filter out the houses that we will need to predict
+MiamiProperties<-
+  MiamiProperties%>%
+  filter(toPredict == 0)
+
 #Selecting between multiple nn variables:
 st_drop_geometry(MiamiProperties) %>% 
   dplyr::select(SalePrice, crime_nn1, crime_nn2, crime_nn3, crime_nn4, crime_nn5, sexualoffenders_Buffer) %>%
@@ -619,13 +622,6 @@ ggcorrplot(
 
 
 ###### BUILD REGRESSION MODELS ######
-MiamiPropertiesAll<-MiamiProperties
-
-#filter out the houses that we will need to predict
-MiamiProperties<-
-  MiamiProperties%>%
-  filter(toPredict == 0)
-
 hist(MiamiProperties$SalePrice)
 hist(log(MiamiProperties$SalePrice))
 MiamiProperties <-
@@ -633,29 +629,12 @@ MiamiProperties <-
   mutate(logSalePrice = log(SalePrice))
 
 ## initial model all inclusive
-reg1 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-             dplyr::select(SalePrice, LotSize, Bed, Bath, Age, 
-                           ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
-                           singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
-                           pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist, pctHH200kOrMore))
-  filter(toPredict == 0) 
-
-
-hist(MiamiProperties$SalePrice)
-hist(log(MiamiProperties$SalePrice))
-MiamiProperties <-
-  MiamiProperties %>%
-  mutate(logSalePrice = log(SalePrice))
-
-
-
-## initial model all inclusive
-reg1 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+reg_1 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
                   dplyr::select(SalePrice, LotSize, Bed, Bath, Age, 
                                 ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
                                 singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
                                 pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist, pctHH200kOrMore))
-summary(reg_initial)
+summary(reg_1)
 ## trimmed/ cleaned up model from the inital model
 
 ##stepwise backward function
@@ -664,12 +643,13 @@ step( lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>%
                          ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
                          singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
                          pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist,pctHH200kOrMore)), direction="backward")
-##output
+
+
 reg3 <- step( lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
                    dplyr::select(SalePrice, LotSize, Bed, Bath, Age, 
-                                         ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
-                                         singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
-                                         pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, pctHH200kOrMore)), direction="backward")
+                                 ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
+                                 singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
+                                 pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, pctHH200kOrMore)), direction="backward")
 summary(reg3)
 
 #crime_nn5
@@ -697,16 +677,10 @@ reg_final <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>%
                            singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, crime_nn5, luxury, elevator))
 summary(reg_final)
                   
-#crime buffer
-reg5 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-             dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedRent, MedHHInc, pctBlackorHis, pctBachelors, pool, 
-                            singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, sexualoffenders_Buffer))
-summary(reg5)
-
 install.packages("stargazer")
 library(stargazer)
 
-stargazer(reg1, reg3, reg4, reg5, type = "html")
+stargazer(reg_initial, reg3, reg4, reg5, type = "html")
 
 #correlation table with final model numeric vars
 reg_final_vars <- 
@@ -738,7 +712,7 @@ Miami.test     <- MiamiProperties[-inTrain,]
 #Regression
 reg_final_train <- lm(SalePrice ~ ., data = st_drop_geometry(Miami.training) %>% 
                   dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedRent, MedHHInc, pctBlackorHis, pctBachelors, pool, 
-                                singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, sexualoffenders_Buffe, luxury, elevator))
+                                singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, crime_nn5, luxury, elevator))
 
 plot(x = predict(reg_final_train), y = Miami.training$SalePrice)
 # Run this a number of times to see Adjusted R2
@@ -996,16 +970,15 @@ st_drop_geometry(bothRegressions) %>%
 
 
 #Race Context and Income Context (from book)
-tracts18 <- 
+tracts18<- 
   tracts18%>%
-  mutate(raceContext = ifelse(pctWhite > .75, "Majority White", "Majority Non-White"),
-         renterContext= ifelse(pctRenterHH>.75, "Majority Renter", "Majority Non-Renter"),
+  mutate(raceContext = ifelse(pctWhite >50, "Majority White", "Majority Other"),
          incomeContext = ifelse(MedInc > 32322, "High Income", "Low Income"))
 
 grid.arrange(ncol = 2,
-             ggplot() + geom_sf(data = na.omit(tracts18), aes(fill = renterContext)) +
-               scale_fill_manual(values = c("#25CB10", "#FA7800"), name="Renter Context") +
-               labs(title = "Renter Context") +
+             ggplot() + geom_sf(data = na.omit(tracts18), aes(fill = raceContext)) +
+               scale_fill_manual(values = c("#25CB10", "#FA7800"), name="Race Context") +
+               labs(title = "Race Context") +
                mapTheme() + theme(legend.position="bottom"), 
              ggplot() + geom_sf(data = na.omit(tracts18), aes(fill = incomeContext)) +
                scale_fill_manual(values = c("#25CB10", "#FA7800"), name="Income Context") +
