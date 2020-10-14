@@ -136,21 +136,45 @@ all_nhoods<-
   rbind(neighborhood,muni_boundary)
 mapview::mapview(all_nhoods)
 
+#Miami Beach Neighborhoods
+MBAreas<-st_read("https://opendata.arcgis.com/datasets/a21e846f4e8e4d81ad3b75bc4f334516_0.geojson")%>%
+  filter(FID>1)%>%
+  filter(FID<130)%>%
+  filter(LAND=="Y")%>%
+  st_transform('ESRI:102658')%>%
+  dplyr::select(FID)%>%
+  rename(Neighborhood=FID)
+  
+st_crs(MBAreas)
+
+all_nhoods_MB<-
+  rbind(neighborhood,MBAreas)%>%
+  st_crop(miami.base_map)
+
+mapview::mapview(all_nhoods_MB)
+
 # Read in Property Data (note that these are centroids, may need to convert to points for some analyses)
 MiamiProperties_original <-
-  ##st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")  
-  st_read("/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson")
+  st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")  
+  #st_read("/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson")
   #st_transform('ESRI:102658')
+
+MiamiProperties_Expensive<-
+  MiamiProperties_original%>%
+  filter(SalePrice>10000000)
 
 st_crs(MiamiProperties) #note that I'm keeping this in the default WGS84 until I finish the CoastDist calculations
 mapview::mapview(MiamiProperties)
 
-MiamiProperties <-
-  #st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")%>%
-  st_read("/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson") %>%
+MiamiProperties<-
+  st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")%>%
+  #st_read("/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson") %>%
   
-  mutate(pool = ifelse(str_detect(XF1, "Pool"), "Pool", "No Pool")) %>% 
+  mutate(pool = ifelse(str_detect((XF1), "Pool") | str_detect((XF2), "Pool") | str_detect((XF3), "Pool"), "Pool", "No Pool")) %>% 
   mutate(singlefamily = ifelse(str_detect(Zoning, "SINGLE FAMILY"), "Yes", "No")) %>%
+  mutate(Age = (2020 - EffectiveYearBuilt),0) %>%
+  mutate(luxury=ifelse(str_detect((XF1), "Luxury") | str_detect((XF2), "Luxury") | str_detect((XF3), "Luxury"), "Yes", "No")) %>%
+  mutate(elevator=ifelse(str_detect((XF1), "Elevator") | str_detect((XF2), "Elevator") | str_detect((XF3), "Elevator"), "Yes", "No")) %>%
   dplyr::select(-Land, -Year,-Bldg, -Total, -Assessed,  -saleDate, -saleType, -saleQual, -County.Senior, -County.LongTermSenior, -County.Other.Exempt, -Owner1, -Owner2, 
                 -Mailing.Address, -Mailing.City, -Mailing.State, -Mailing.Zip, -Mailing.Country, -YearBuilt,
                 -City.Senior, -City.LongTermSenior, -City.Other.Exempt, -Legal1, -Legal2, -Legal3, -Legal4, -Legal5, -Legal6, -XF1, -XF2, -XF3,
@@ -180,7 +204,8 @@ MiamiProperties <-
 
 MiamiProperties<-
   MiamiProperties%>%
-  mutate(milecoast=ifelse(CoastDist<1,"Yes","No"))
+  mutate(milecoast=ifelse(CoastDist<1,"Yes","No"))%>%
+  mutate(halfmilecoast=ifelse(CoastDist<0.5,"Yes","No"))
 
 ## Add Data on Bars, pubs, and restaurants
 bars <- opq(bbox = c(xmin, ymin, xmax, ymax)) %>% 
@@ -213,7 +238,7 @@ MiamiProperties<-
   MiamiProperties%>%
   mutate(bars_Buffer = replace_na(bars_Buffer, 0))
 
-### plot yo visulize location
+### plot to visulize location
 ggplot()+
   geom_sf(data=miami.base, fill="black")+
   geom_sf(data=bars, colour="red", size=1)
@@ -240,7 +265,7 @@ sexual_offend_map<-
   miami.sexualoffenders%>%
   st_intersection(all_nhoods)
 
-ggplot() + geom_sf(data = all_nhoods, fill = "grey40") +
+ggplot() + geom_sf(data = all_nhoods_MB, fill = "grey40") +
   stat_density2d(data = data.frame(st_coordinates(sexual_offend_map)), 
                  aes(X, Y, fill = ..level.., alpha = ..level..),
                  size = 0.01, bins = 40, geom = 'polygon') +
@@ -323,7 +348,12 @@ MiamiProperties<-
 #Add neighborhood name to each property
 MiamiProperties<-
   MiamiProperties%>%
-  st_join(all_nhoods)
+  st_join(all_nhoods_MB)#updated to include more designations in MB (note these are numbers not names)
+
+#Add variable for Miami or Miami Beach
+MiamiProperties<-
+  MiamiProperties%>%
+  mutate(MiamiBeach=ifelse(Property.City=="Miami Beach","Yes","No"))
 
 ## Load in census data
 
@@ -347,7 +377,12 @@ selected_vars <- c("B02001_001E", # Estimate!!Total population by race -- ##let'
                    "B07013_002E", # Total owner-occupied households
                    "B07013_003E", # total renter-occupied households
                    "B25027_001E",
-                   "B25027_010E") 
+                   "B25027_010E",
+                   "B25038_002E",
+                   "B25038_003E",
+                   "B25038_004E",
+                   "B25038_005E",
+                   "B19001_017E") 
 
 tracts18 <- 
   get_acs(geography = "tract", 
@@ -375,7 +410,11 @@ tracts18 <-
          OwnerHH = B07013_002E,
          RenterHH = B07013_003E,
          #TotalHH2 = B25027_001E,
-         HHNoMort = B25027_010E) %>%
+         HHNoMort = B25027_010E,
+         Own2017later = B25038_003E,
+         Own201516 = B25038_004E,
+         Own201014 = B25038_005E,
+         HH200k = B19001_017E) %>%
   dplyr::select(-NAME, -starts_with("B0"), -starts_with("B1"), -starts_with("B2")) %>%
   mutate(pctWhite = (ifelse(TotalPop > 0, Whites / TotalPop,0))*100,
          pctBlack = (ifelse(TotalPop > 0, Blacks / TotalPop,0))*100,
@@ -388,8 +427,11 @@ tracts18 <-
          pctOwnerHH = (ifelse(TotalHH > 0, OwnerHH / TotalHH,0))*100,
          pctRenterHH = (ifelse(TotalHH > 0, RenterHH / TotalHH,0))*100,
          pctNoMortgage = (ifelse(TotalHH > 0, HHNoMort / TotalHH,0))*100,
+         pctOwnerSince2010 = (ifelse(OwnerHH > 0, ((Own2017later + Own201516 + Own201014) / OwnerHH),0)) *100,
+         pctHH200kOrMore = (ifelse(TotalHH > 0, (HH200k/ TotalHH),0))*100,
          year = "2018") %>%
-  mutate(MedHHInc = replace_na(MedHHInc, 0)) %>%
+  mutate(MedHHInc = replace_na(MedHHInc, 0),
+         MedRent = replace_na(MedRent,0)) %>%
   dplyr::select(-Whites, -Blacks, -FemaleBachelors, -MaleBachelors, -TotalPoverty, -CarCommute, -PubCommute, -TotalCommute, -TotalHispanic)
 
 
@@ -441,7 +483,7 @@ st_drop_geometry(MiamiProperties) %>%
 st_drop_geometry(MiamiProperties) %>% 
   mutate(Age = 2020 - EffectiveYearBuilt) %>%
   dplyr::select(SalePrice, LivingSqFt, Age, CoastDist, bars_nn1, bars_nn2, crime_nn1, crime_nn2, parks_nn1, parks_nn2, metro_nn1) %>%
-  filter(SalePrice <= 1000000, Age < 500) %>%
+  #filter(SalePrice <= 1000000, Age < 500) %>%
   gather(Variable, Value, -SalePrice) %>% 
   ggplot(aes(Value, SalePrice)) +
   geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
@@ -451,8 +493,8 @@ st_drop_geometry(MiamiProperties) %>%
 
 #Price as a function of categorical variables
 st_drop_geometry(MiamiProperties) %>%
-  dplyr::select(SalePrice, Halfmile_metro, Stories, pool, singlefamily)%>%
-  filter(SalePrice <= 1000000) %>%
+  dplyr::select(SalePrice, Halfmile_metro, Stories, pool, singlefamily, elevator, luxury)%>%
+  #filter(SalePrice <= 1000000) %>%
   gather(Variable,Value, -SalePrice)%>%
   ggplot(aes(Value, SalePrice))+
   geom_bar(position="dodge",stat="summary", fun.y="mean")+
@@ -465,7 +507,7 @@ Miami.Plot<-
   mutate(PricePerSq=SalePrice/ActualSqFt)
 
 ggplot()+
-  geom_sf(data=all_nhoods, fill="grey40")+
+  geom_sf(data=all_nhoods_MB, fill="grey40")+
   geom_sf(data=Miami.Plot, aes(colour=q5(PricePerSq)),
           show.legend="point", size=.75)+
   scale_colour_manual(values=palette5,
@@ -477,14 +519,14 @@ ggplot()+
 #3 maps of independent variables
 Parks_map<-
   Parks%>%
-  st_intersection(all_nhoods)
+  st_intersection(all_nhoods_MB)
 ggplot()+
-  geom_sf(data=all_nhoods, fill="grey40")+
+  geom_sf(data=all_nhoods_MB, fill="grey40")+
   geom_sf(data=Parks_map, size=1, color="lightgreen")+
   labs(title="Park Locations") +
   mapTheme()
 
-ggplot() + geom_sf(data = all_nhoods, fill = "grey40") +
+ggplot() + geom_sf(data = all_nhoods_MB, fill = "grey40") +
   stat_density2d(data = data.frame(st_coordinates(Parks_map)), 
                  aes(X, Y, fill = ..level.., alpha = ..level..),
                  size = 0.01, bins = 40, geom = 'polygon') +
@@ -495,14 +537,14 @@ ggplot() + geom_sf(data = all_nhoods, fill = "grey40") +
 
 bars_map<-
   bars%>%
-  st_intersection(all_nhoods)
+  st_intersection(all_nhoods_MB)
 ggplot()+
-  geom_sf(data=all_nhoods, fill="grey40")+
+  geom_sf(data=all_nhoods_MB, fill="grey40")+
   geom_sf(data=bars_map, size=1, color="red")+
   labs(title="Bar, Pub, and Restaurant Locations") +
   mapTheme()
 
-ggplot() + geom_sf(data = all_nhoods, fill = "grey40") +
+ggplot() + geom_sf(data = all_nhoods_MB, fill = "grey40") +
   stat_density2d(data = data.frame(st_coordinates(bars_map)), 
                  aes(X, Y, fill = ..level.., alpha = ..level..),
                  size = 0.01, bins = 40, geom = 'polygon') +
@@ -514,9 +556,9 @@ ggplot() + geom_sf(data = all_nhoods, fill = "grey40") +
 
 metro_stops_map<-
   metro_stops%>%
-  st_intersection(all_nhoods)
+  st_intersection(all_nhoods_MB)
 ggplot()+
-  geom_sf(data=all_nhoods, fill="grey40")+
+  geom_sf(data=all_nhoods_MB, fill="grey40")+
   geom_sf(data=metro_stops_map, size=1, color="orange")+
   labs(title="Metromover and Metrorail Stops") +
   mapTheme()
@@ -531,13 +573,14 @@ elem_map<-
   rename(elem_name=NAME)
 
 ggplot()+
-  geom_sf(data=all_nhoods, fill="grey40")+
+  geom_sf(data=all_nhoods_MB, fill="grey40")+
   geom_sf(data=elem_map, color="orange", fill="grey40")+
   labs(title="Elementary School District Boundaries") +
   mapTheme()
 
+  
 ggplot()+
-  geom_sf(data=all_nhoods) +
+  geom_sf(data=all_nhoods_MB) +
   labs(title="Neighborhood Boundaries") +
   mapTheme()
 
@@ -577,37 +620,71 @@ MiamiPropertiesAll<-MiamiProperties
 #filter out the houses that we will need to predict
 MiamiProperties<-
   MiamiProperties%>%
-  filter(toPredict == 0) #%>%
-#filter(SalePrice <1000000)
+  filter(toPredict == 0)
 
+hist(MiamiProperties$SalePrice)
+hist(log(MiamiProperties$SalePrice))
+MiamiProperties <-
+  MiamiProperties %>%
+  mutate(logSalePrice = log(SalePrice))
 
-
-## initial model
+## initial model all inclusive
+reg1 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+             dplyr::select(SalePrice, LotSize, Bed, Bath, Age, 
+                           ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
+                           singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
+                           pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist, pctHH200kOrMore))
+summary(reg_initial)
 ## trimmed/ cleaned up model from the inital model
 ##stepwise backward function
 step( lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-           dplyr::select(SalePrice, LotSize, Bed, Bath, Stories, EffectiveYearBuilt, ActualSqFt,
-                         sexualoffenders_Buffer, bars_Buffer, parks_nn1, metro_nn1,
-                         MedHHInc, pctBlack, pctHis, pctBlack, pctHis,
-                         pctBachelors, pctPoverty, pool, singlefamily, pctOwnerHH)), direction="backward")
+           dplyr::select(SalePrice, LotSize, Bed, Bath, Age, 
+                         ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
+                         singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
+                         pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist,pctHH200kOrMore)), direction="backward")
 ##output
+reg3 <- step( lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+                   dplyr::select(SalePrice, LotSize, Bed, Bath, Age, 
+                                 ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
+                                 singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
+                                 pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, pctHH200kOrMore)), direction="backward")
+summary(reg3)
+
+#crime_nn5
+reg4 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+             dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedRent, MedHHInc, pctBlackorHis, pctBachelors, pool, 
+                           singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, crime_nn5))
+summary(reg4)
+#crime buffer
+
 reg5 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-             dplyr::select(SalePrice, LotSize, Bed, Bath, Stories, EffectiveYearBuilt, 
-                            ActualSqFt, parks_nn1, MedHHInc, pctBachelors, pool, 
-                             singlefamily, pctOwnerHH))
+             dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedRent, MedHHInc, pctBlackorHis, pctBachelors, pool, 
+                           singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, sexualoffenders_Buffer))
 summary(reg5)
+
+reg_test <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+                  dplyr::select(SalePrice, LotSize, Bed, Bath, EffectiveYearBuilt, 
+                                ActualSqFt, parks_nn1, MedHHInc, pctBlack, pctHis, pctBachelors, pool, 
+                                singlefamily, pctOwnerHH, crime_nn5, milecoast, , Neighborhood, luxury, elevator))
+summary(reg_test)
+
 
 #final model
 reg_final <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
              dplyr::select(SalePrice, LotSize, Bed, Bath, EffectiveYearBuilt, 
                             ActualSqFt, parks_nn1, MedHHInc, pctBlack, pctHis, pctBachelors, pool, 
-                            singlefamily, pctOwnerHH, crime_nn5, milecoast, pctNoMortgage))
+                            singlefamily, pctOwnerHH, crime_nn5, luxury, elevator))
 summary(reg_final)
+
+install.packages("stargazer")
+library(stargazer)
+
+stargazer(reg1, reg3, reg4, reg5, type = "html")
 
 #correlation table with final model numeric vars
 reg_final_vars <- 
-  select(st_drop_geometry(MiamiProperties), SalePrice, LotSize, Bed, Bath, EffectiveYearBuilt, 
-         ActualSqFt, parks_nn1, MedHHInc, pctBlack, pctHis, pctBachelors, pctOwnerHH, crime_nn5) %>% na.omit()
+  select(st_drop_geometry(MiamiProperties), SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedHHInc, pctWhite, pctBachelors, 
+         pctOwnerHH, pctCarCommute, pctOwnerSince2010, crime_nn5) %>% na.omit()
 
 ggcorrplot(
   round(cor(reg_final_vars), 1), 
@@ -633,9 +710,9 @@ Miami.test     <- MiamiProperties[-inTrain,]
 
 #Regression
 reg_final_train <- lm(SalePrice ~ ., data = st_drop_geometry(Miami.training) %>% 
-                  dplyr::select(SalePrice, LotSize, EffectiveYearBuilt, 
-                                ActualSqFt, pctBachelors, pool, MedHHInc,
-                                singlefamily, pctOwnerHH, pctWhite, pctBlack, crime_nn5, milecoast, pctNoMortgage))
+                  dplyr::select(SalePrice, LotSize, Bed, Bath, EffectiveYearBuilt, 
+                                ActualSqFt, parks_nn1, MedHHInc, pctBlack, pctHis, pctBachelors, pool, 
+                                singlefamily, pctOwnerHH, crime_nn5, luxury, elevator))
 
 plot(x = predict(reg_final_train), y = Miami.training$SalePrice)
 # Run this a number of times to see Adjusted R2
@@ -677,14 +754,14 @@ ggplot(preds, aes(x = pred, y = actual, color = source)) +
 ########### CROSS- VALIDATION ##########
 
 #Generalizability - cross validation
-fitControl <- trainControl(method = "cv", number = 20, savePredictions = TRUE)
+fitControl <- trainControl(method = "cv", number = 100, savePredictions = TRUE)
 set.seed(825)
 
 reg.cv <- 
   train(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
           dplyr::select(SalePrice, LotSize, Bed, Bath, EffectiveYearBuilt, 
-                        ActualSqFt, parks_nn1, pctBachelors, pool, 
-                        singlefamily, pctOwnerHH, crime_nn5, milecoast), 
+                        ActualSqFt, parks_nn1, MedHHInc, pctBlack, pctHis, pctBachelors, pool, 
+                        singlefamily, pctOwnerHH, crime_nn5, luxury, elevator), 
         method = "lm", trControl = fitControl, na.action = na.pass)
 
 reg.cv
@@ -718,7 +795,7 @@ st_crs(map_preds) <- st_crs(all_nhoods)
 
 # plot errors on a map
 ggplot() +
-  geom_sf(data = all_nhoods, fill = "grey40") +
+  geom_sf(data = nhoods_MB_Map, fill = "grey40") +
   geom_sf(data = map_preds, aes(colour = q5(SalePrice.AbsError)),
           show.legend = "point", size = 1) +
   scale_colour_manual(values = palette5,
@@ -747,8 +824,8 @@ Miami.test <-
          SalePrice.AbsError = abs(SalePrice.Predict - SalePrice),
          SalePrice.APE = (abs(SalePrice.Predict - SalePrice)) / SalePrice.Predict)%>%
   mutate(SalePrice.AbsError = replace_na(SalePrice.AbsError, 0))%>%
-  mutate(SalePrice.Error=replace_na(SalePrice.Error, 0))%>%
-  filter(SalePrice < 5000000)
+  mutate(SalePrice.Error=replace_na(SalePrice.Error, 0))#%>%
+  #filter(SalePrice < 5000000)
 
 coords.test <-  st_coordinates(st_centroid(Miami.test)) 
 neighborList.test <- knn2nb(knearneigh(coords.test, k_nearest_neighbors))
@@ -818,7 +895,7 @@ map_preds_sum <- map_preds %>%
   summarise(meanMAE = mean(SalePrice.AbsError))
 
 ggplot() +
-  geom_sf(data = all_nhoods %>% 
+  geom_sf(data = nhoods_MB_Map %>% 
             left_join(st_drop_geometry(map_preds_sum), by = "Neighborhood"),
           aes(fill = q5(meanMAE))) +
   scale_fill_manual(values = palette5,
@@ -829,8 +906,8 @@ ggplot() +
 
 reg.nhood <- lm(SalePrice ~ ., data = as.data.frame(Miami.training) %>% 
                   dplyr::select(Neighborhood, SalePrice, LotSize, Bed, Bath, EffectiveYearBuilt, 
-                                ActualSqFt, parks_nn1, pctBachelors, pool, 
-                                singlefamily, pctOwnerHH, crime_nn5, milecoast))
+                                ActualSqFt, parks_nn1, MedHHInc, pctBlack, pctHis, pctBachelors, pool, 
+                                singlefamily, pctOwnerHH, crime_nn5, luxury, elevator))
 
 Miami.test.nhood <-
   Miami.test %>%
@@ -840,8 +917,8 @@ Miami.test.nhood <-
          SalePrice.AbsError = abs(SalePrice - SalePrice.Predict),
          SalePrice.APE = (abs(SalePrice - SalePrice.Predict)) / SalePrice) %>%
   mutate(SalePrice.AbsError = replace_na(SalePrice.AbsError, 0))%>%
-  mutate(SalePrice.Error=replace_na(SalePrice.Error, 0))%>%
-  filter(SalePrice < 5000000)
+  mutate(SalePrice.Error=replace_na(SalePrice.Error, 0))#%>%
+  #filter(SalePrice < 5000000)
 
 bothRegressions <- 
   rbind(
@@ -880,7 +957,7 @@ st_drop_geometry(bothRegressions) %>%
   group_by(Regression, Neighborhood) %>%
   summarize(mean.MAPE = mean(SalePrice.APE, na.rm = T)) %>%
   ungroup() %>% 
-  left_join(all_nhoods) %>%
+  left_join(nhoods_MB_Map) %>%
   st_sf() %>%
   ggplot() + 
   geom_sf(aes(fill = mean.MAPE)) +
@@ -896,12 +973,13 @@ st_drop_geometry(bothRegressions) %>%
 tracts18 <- 
   tracts18%>%
   mutate(raceContext = ifelse(pctWhite > .75, "Majority White", "Majority Non-White"),
+         renterContext= ifelse(pctRenterHH>.75, "Majority Renter", "Majority Non-Renter"),
          incomeContext = ifelse(MedInc > 32322, "High Income", "Low Income"))
 
 grid.arrange(ncol = 2,
-             ggplot() + geom_sf(data = na.omit(tracts18), aes(fill = raceContext)) +
-               scale_fill_manual(values = c("#25CB10", "#FA7800"), name="Race Context") +
-               labs(title = "Race Context") +
+             ggplot() + geom_sf(data = na.omit(tracts18), aes(fill = renterContext)) +
+               scale_fill_manual(values = c("#25CB10", "#FA7800"), name="Renter Context") +
+               labs(title = "Renter Context") +
                mapTheme() + theme(legend.position="bottom"), 
              ggplot() + geom_sf(data = na.omit(tracts18), aes(fill = incomeContext)) +
                scale_fill_manual(values = c("#25CB10", "#FA7800"), name="Income Context") +
@@ -965,8 +1043,8 @@ Miami.test.elem <-
          SalePrice.AbsError = abs(SalePrice - SalePrice.Predict),
          SalePrice.APE = (abs(SalePrice - SalePrice.Predict)) / SalePrice) %>%
   mutate(SalePrice.AbsError = replace_na(SalePrice.AbsError, 0))%>%
-  mutate(SalePrice.Error=replace_na(SalePrice.Error, 0))%>%
-  filter(SalePrice < 5000000)
+  mutate(SalePrice.Error=replace_na(SalePrice.Error, 0))#%>%
+  #filter(SalePrice < 5000000)
 
 threeRegressions <- 
   rbind(
