@@ -11,6 +11,59 @@ output:
     toc_float:
       collapsed: false
 ---
+OUTLINE
+1. introduction
+  - set up
+2. Data wrangling
+  - make table with all datasets
+  - main data
+  - supplement data: coastline, bars/restaurant, crime, park, and metro data
+  - census data
+3. Analysis of created features
+  - table with engineered features
+    - one scatterplot for nn variables
+    - table of slopes 
+    - select nn vars for each dataset
+  - map of your dependent variable (sale price)
+  - 3 maps of independent variables
+    - bars density map
+    - map of 1 or 2 census data (NEED)
+4. Test for correlation
+  - correlation table with numeric values (only include selected nn vars) (NEED)
+  - correlation table with census variables
+  - text on highlighted relationships 
+4. Model Building
+  - one example model
+    - provide written interpretation
+  - trimmed/altered from the initial model
+  - stepwise function process
+  - final model (describe why we added a few more vars that we created)
+    - add stargazer table with all regs models to compare
+5. Cross Validation/ Results
+  - test for accuracy via MAE
+      - table of mean absolute error and MAPE for a single test set
+  - Generalizability
+      - provide result of cross validation
+      - Plot of predicted prices as a function of observed prices
+      - Provide a map of your residuals for your test set. 
+          - Moran’s I test
+          - a plot of the spatial lag in errors. 
+      - Provide a map of your predicted values for where ‘toPredict’ is both 0 and 1. (NEED)
+      - Using the test set predictions, provide a map of MAPE by neighborhood and possibly elementary school
+      - Provide a scatterplot plot of MAPE by neighborhood as a function of mean price by neighborhood. 
+
+6. Discussion/Conclusion
+
+###QUESITON####
+- we are not predicting expensive housings. what are the solutions for this?
+- adding neighborhood makes our model worse? 
+
+- altering zipcode information
+
+- how to get slope of the scatter plots
+- after applying neighborhood/school zone, should we test errors again?
+
+
 # 1. Introduction
 
 # 2. Set Up and Data Wrangling
@@ -140,7 +193,7 @@ ggplot() +
 ```
 
 
-### 2.4 loading the main data/ 
+### 2.4 loading the main data
 ```{r, message=FALSE, warning=FALSE}
 MiamiProperties <-
   #st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")%>%
@@ -180,7 +233,8 @@ all_nhoods<-
   rbind(neighborhood,muni_boundary)
 ```
 
-```{r, message=FALSE, warning=FALSE}
+### 2.5 calculating coastline,bars/restaurant, crime, park, and metro data
+```{r, calculating coastline,bars/restaurant, crime, park, and metro data message=FALSE, warning=FALSE}
 ## Calculate the distance to Coastline (this calculation has to be in WGS84)
 Coastline<-opq(bbox = c(xmin, ymin, xmax, ymax)) %>% 
   add_osm_feature("natural", "coastline") %>%
@@ -321,7 +375,7 @@ MiamiProperties<-
 ```
 
 
-```{r, message=FALSE, warning=FALSE}
+```{r, loading census data,  message=FALSE, warning=FALSE}
 ## Load in census data
 
 census_api_key("41e1c0d912341017fa6f36a5da061d3b23de335e", overwrite = TRUE)
