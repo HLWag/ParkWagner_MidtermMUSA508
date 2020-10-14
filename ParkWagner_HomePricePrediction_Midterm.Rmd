@@ -116,19 +116,20 @@ OUTLINE - I did some rearranging of this to make it fit more closely with the de
 - after applying neighborhood/school zone, should we test errors again?
 
 
-#1. Introduction
+# 1. Introduction
+
 Zillow’s housing market predictions, known as Zestimates, are valued for their nationwide coverage and general accuracy. For example, the nationwide median error for off-market homes is 7.5% and for on-market homes is 1.9%^[Zillow. 2020. "Zestimate." https://www.zillow.com/zestimate/]. However, when considering a specific city or region, the accuracy of the Zestimates could be improved by including locally-specific data in the prediction process. This analysis aims to build an accurate and generalizable hedonic model that predicts home prices for Miami by deconstructing overall home price into the value of constituent parts. Accurate models lead to only small differences between the predicted and observed values, and generalizable models accurately predict on new data and with comparable accuracy across various groups. By working to improve the accuracy and generalizability of the predictive model, we are ultimately striving to create a more useful decision-making tool. Such a model may be useful for local governments as they assess property taxes, for example.
 
-##Modeling Strategy
+## Modeling Strategy
 To predict housing prices in the Miami area, we train a model using home prices from recent sales. Our model includes “features,” which are variables that are used to predict outcomes (in this case, home price). We use a hedonic model, which breaks home price into components that explain the cost: physical characteristics (e.g., living area), public services and amenities (e.g., distance parks), and the spatial process of prices (e.g., prices for homes within neighborhoods cluster together). Our process uses data wrangling, exploratory analysis, feature engineering, feature selection, and model estimate and validation to produce a hedonic model that effectively predicts home prices for Miami and Miami Beach. Key challenges inherent to this process involve identifying and cleaning publicly available data for inclusion, investigating underlying spatial processes and trends, and selecting an effective set of features for inclusion in the model while avoiding choosing variables that are too closely correlated with each other. 
 
-##Results
+## Results
 Our results show…
 Summary of the features included in our final model.
 MAPE of percent and dollar amount for the final model
 Would we recommend using this?
 
-##Setup Code
+## Setup Code
 To begin the analysis, this section loads libraries and options, specifies styling options for maps and plots, creates quantile break functions and quantile styling, and loads color palettes. This section also creates the "nearest neighbor" function, which calculates the average nearest neighbor distance from each home to its k nearest objects of interest. This calculation is useful for creating features that describe the relative amount of an amenity around each home. For example, the nearest neighbor function can tell us the average distance from each home to the closest 1, 2, 3, 4, or 5 parks, bars, and crime events. In our exploratory analysis, we determine which nearest neighbor features are most appropriate for inclusion in the model.
 
 **Libraries and Options**
@@ -158,7 +159,7 @@ options(tigris_class = "sf")
 ```
 
 **Themes for Map and Plots**
-```{r, message=FALSE, warning=FALSE}
+```{r Themes, message=FALSE, warning=FALSE}
 
 mapTheme <- function(base_size = 12) {
   theme(
@@ -215,7 +216,7 @@ q5 <- function(variable) {as.factor(ntile(variable, 5))}
 ```
 
 **Nearest Neighbor Function**
-```{r,message=FALSE, warning=FALSE}
+```{r NN Function, message=FALSE, warning=FALSE}
 nn_function <- function(measureFrom,measureTo,k) {
   measureFrom_Matrix <- as.matrix(measureFrom)
   measureTo_Matrix <- as.matrix(measureTo)
@@ -236,14 +237,14 @@ nn_function <- function(measureFrom,measureTo,k) {
 }
 ```
 
-#2. Data 
+# 2. Data 
 This analysis uses data from a variety of sources: we derived physical characteristics of each house from the underlying home data, gathered public services and amenities information from the Miami-Dade County Open Data Hub and OpenStreetMap, and incorporated population data from the U.S. Census Bureau’s 5-year American Community Survey.
 
-##Data Gathering: Description & Code
+## Data Gathering: Description & Code
 We accessed data for the analysis via the Miami-Dade County Open Data Hub API and using the osmdata package to access OpenStreetMap variables of interest. Most of the data required manipulation and cleaning before being explored. This process included transformations in order to maximize the effectiveness of prediction for each variable. 
 
 **Loading Basemap**
-```{r}
+```{r Basemap, message=FALSE, warning=FALSE}
 # Loading Miami base map from OSM Data
 miami.base <- 
   st_read("https://opendata.arcgis.com/datasets/5ece0745e24b4617a49f2e098df8117f_0.geojson") %>%
@@ -254,18 +255,13 @@ xmin = st_bbox(miami.base)[[1]]
 ymin = st_bbox(miami.base)[[2]]
 xmax = st_bbox(miami.base)[[3]]  
 ymax = st_bbox(miami.base)[[4]]
-
-ggplot() +
-  geom_sf(data=miami.base, fill="gray45", color = "gray20") +
-  ggtitle("Miami Basemap") +
-  geom_sf(data=st_as_sfc(st_bbox(miami.base)), colour="coral4", fill=NA) 
 ```
 
 **Loading the Home Data and Neighborhood Data**
-```{r, message=FALSE, warning=FALSE}
+```{r Load Data, message=FALSE, warning=FALSE}
 MiamiProperties<-
-  #st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")%>%
-  st_read("/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson") %>%
+  st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")%>%
+  #st_read("/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson") %>%
   
   mutate(pool = ifelse(str_detect((XF1), "Pool") | str_detect((XF2), "Pool") | str_detect((XF3), "Pool"), "Pool", "No Pool")) %>% 
   mutate(singlefamily = ifelse(str_detect(Zoning, "SINGLE FAMILY"), "Yes", "No")) %>%
@@ -283,7 +279,6 @@ st_crs(MiamiProperties)
 elementary.school.boundaries <- 
   st_read("https://opendata.arcgis.com/datasets/19f5d8dcd9714e6fbd9043ac7a50c6f6_0.geojson") %>%
   st_transform('ESRI:102658')
-  #filter(CITY == "Miami" | CITY == "Miami Beach"| CITY == "North Bay Village")  
 
 #Neighborhood Data
 neighborhood<-
@@ -311,14 +306,23 @@ MBAreas<-st_read("https://opendata.arcgis.com/datasets/a21e846f4e8e4d81ad3b75bc4
   dplyr::select(FID)%>%
   rename(Neighborhood=FID)
 
+miami.base_map<-
+  miami.base%>%
+  st_transform('ESRI:102658')
+
+elem_map<-
+  elementary.school.boundaries%>%
+  st_crop(miami.base_map)%>%
+  rename(elem_name=NAME)
+
 all_nhoods_MB<-
   rbind(neighborhood,MBAreas)%>%
   st_crop(miami.base_map)
 ```
 
 **Calculating the distance to coastline, and proximity to bars/restaurants, crimes, parks, and public transportation**
-```{r, calculating coastline,bars/restaurant, crime, park, and metro data message=FALSE, warning=FALSE}
-## Calculate the distance to Coastline
+```{r Feature Engineering, message=FALSE, warning=FALSE, cache=TRUE}
+## Calculate the distance to Coastline (this calculation has to be in WGS84)
 Coastline<-opq(bbox = c(xmin, ymin, xmax, ymax)) %>% 
   add_osm_feature("natural", "coastline") %>%
   osmdata_sf()
@@ -328,8 +332,6 @@ MiamiProperties <-
   MiamiProperties %>%
   mutate(CoastDist=(geosphere::dist2Line(p=st_coordinates(st_centroid(MiamiProperties)),
                                         line=st_coordinates(Coastline$osm_lines)[,1:2])*0.00062137)[,1])
-
-hist(MiamiProperties$CoastDist)
 
 ##Convert Miami Data to Local Projection #st_transform('ESRI:102658')
 MiamiProperties <-
@@ -378,9 +380,6 @@ miami.sexualoffenders <-
   filter(CITY == "MIAMI" | CITY == "MIAMI BEACH" | CITY == "Miami" | CITY == "Miami Beach") %>%
   st_transform('ESRI:102658')
 
-mapview::mapview(miami.sexualoffenders)
-st_crs(miami.sexualoffenders) 
-
 MiamiProperties$sexualoffenders_Buffer =
   st_buffer(MiamiProperties, 660) %>%
   aggregate(mutate(dplyr::select(miami.sexualoffenders), counter = 1),., sum) %>%
@@ -389,15 +388,6 @@ MiamiProperties$sexualoffenders_Buffer =
 MiamiProperties<-
   MiamiProperties%>%
   mutate(sexualoffenders_Buffer = replace_na(sexualoffenders_Buffer, 0))
-
-ggplot() + geom_sf(data = miami.base, fill = "grey40") +
-  stat_density2d(data = data.frame(st_coordinates(miami.sexualoffenders)), 
-                 aes(X, Y, fill = ..level.., alpha = ..level..),
-                 size = 0.01, bins = 40, geom = 'polygon') +
-  scale_fill_gradient(low = "#25CB10", high = "#FA7800", name = "Density") +
-  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
-  labs(title = "Density of Sexual Offenders in Miami") +
-  mapTheme()
 
 MiamiProperties <-
   MiamiProperties %>% 
@@ -411,7 +401,6 @@ MiamiProperties <-
 ## Add the data on Park Facilities
 Parks<-st_read("https://opendata.arcgis.com/datasets/8c9528d3e1824db3b14ed53188a46291_0.geojson")%>%
 st_transform('ESRI:102658')
-mapview::mapview(Parks)
 
 MiamiProperties<-
   MiamiProperties %>% 
@@ -431,16 +420,7 @@ MiamiProperties<-
   MiamiProperties%>%
   mutate(parks.Buffer = replace_na(parks.Buffer, 0))
 
-### nn for parks 
-MiamiProperties$parks.Buffer =
-  st_buffer(MiamiProperties, 660) %>%
-  aggregate(mutate(dplyr::select(Parks), counter = 1),., sum) %>%
-  pull(counter)
-
-MiamiProperties <- MiamiProperties %>%
-  mutate(parks.Buffer = replace_na(parks.Buffer, 0))
-
-#TOD or non-TOD; distance to transit stop
+#TOD or non-TOD; distance to transit stop?
 metrorail_stop<-st_read("https://opendata.arcgis.com/datasets/ee3e2c45427e4c85b751d8ad57dd7b16_0.geojson")%>%
   st_transform('ESRI:102658')%>%
   dplyr::select(NAME)
@@ -462,7 +442,7 @@ MiamiProperties<-
 ```
 
 **Add Neighborhood and Elementary School Data to Each Home**
-```{r}
+```{r Neighborhood, message=FALSE, warning=FALSE}
 #Add Elementary School Name to Each Property
 elementary.school.clean<-
   elementary.school.boundaries%>%
@@ -485,10 +465,9 @@ MiamiProperties<-
 ```
 
 **Load Census Data**
-```{r, loading census data,  message=FALSE, warning=FALSE}
+```{r Census data,message=FALSE, warning=FALSE}
 ## Load in census data
 census_api_key("41e1c0d912341017fa6f36a5da061d3b23de335e", overwrite = TRUE)
-
 
 selected_vars <- c("B02001_001E", # Estimate!!Total population by race -- ##let's double check that it's okay to use this as long as we justify it
                    "B02001_002E", # People describing themselves as "white alone"
@@ -512,8 +491,7 @@ selected_vars <- c("B02001_001E", # Estimate!!Total population by race -- ##let'
                    "B25038_003E",
                    "B25038_004E",
                    "B25038_005E",
-                   "B19001_017E"
-                   )
+                   "B19001_017E")
 
 tracts18 <- 
   get_acs(geography = "tract", 
@@ -565,39 +543,162 @@ tracts18 <-
          MedRent = replace_na(MedRent,0)) %>%
   dplyr::select(-Whites, -Blacks, -FemaleBachelors, -MaleBachelors, -TotalPoverty, -CarCommute, -PubCommute, -TotalCommute, -TotalHispanic)
 
-
 #merge the data into the MiamiProperties dataframe
 MiamiProperties <-st_join(MiamiProperties,tracts18)
 ```
 
-###Sources:
-The table below includes the data for our analysis: NEED TO MAKE TABLE
+**Feature building is complete. Remove homes to be used in prediction exercise*
+```{r remove toPredict, message=FALSE, warning=FALSE}
+MiamiPropertiesAll<-MiamiProperties
 
-###Variables:
+#filter out the houses that we will need to predict
+MiamiProperties<-
+  MiamiProperties%>%
+  filter(toPredict == 0)
+```
+
+### Variables:
 Table with columns for dataset, variable, description, and Y/N for inclusion in the final model.
 Table of Summary Statistics for variables included in the final model (using stargazer)
 
-For this analysis, we used neighborhoods as our geographic unit of analysis to predict home sale prices. We also explored elementary school districts as another unit of analysis that may explain the spatial process of prices. 
-Maps of the neighborhood and elementary school districts?
 
-
-##Correlation:
+## Correlation:
 As part of the exploratory analysis, we examined correlation to assist in identifying features that may be useful for predicting sales price. A correlation matrix helps us visualize correlation across numeric variables. In the figure, the darker colors imply stronger correlation. This plot helps to determine features that are correlated to sale prices (see sale prices row) and variables that are correlated with each other. 
-Correlation Matrix
-The scatterplots below plot sales price as a function of numeric features. These plots suggest a correlation exists. Adapt this text from the book as relevant for our features: In all cases, the regression line slopes upward from left to right, meaning that on average, as age and house size increase, so does price. Correlation can also be described by the slope of the line as well. The greater the slope, the greater the feature's effect on price.
-4 Home Price Correlation Scatterplots
+
+```{r Correlation Matrix, message=FALSE, warning=FALSE}
+#Correlation of Census Variables
+censusVars <- 
+  select(st_drop_geometry(MiamiProperties), SalePrice, MedHHInc, MedRent, pctWhite, pctBlack, pctHis, pctBlackorHis, 
+          pctBachelors, pctPoverty, pctCarCommute, pctPubCommute, pctOwnerHH, pctRenterHH) %>% na.omit()
+ggcorrplot(
+  round(cor(censusVars), 1), 
+  p.mat = cor_pmat(censusVars),
+  colors = c("#25CB10", "white", "#FA7800"),
+  type="lower",
+  insig = "blank") +  
+  labs(title = "Correlation across census variables") 
+
+
+#Correlation of Variables Included in Model
+reg_final_vars <- 
+  select(st_drop_geometry(MiamiProperties), SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedHHInc, pctWhite, pctBachelors, 
+         pctOwnerHH, pctCarCommute, pctOwnerSince2010, crime_nn5) %>% na.omit()
+
+ggcorrplot(
+  round(cor(reg_final_vars), 1), 
+  p.mat = cor_pmat(reg_final_vars),
+  colors = c("#25CB10", "white", "#FA7800"),
+  type="lower",
+  insig = "blank") +  
+  labs(title = "Correlation across final features") 
+```
+
+The scatterplots below plot sales price as a function of numeric features. These plots suggest a correlation exists. In all cases, the regression line slopes upward from left to right, meaning that on average, as the variable of interest (e.g., home size, median household income, distance to the nearest park, and household income greater than $200,000) increases, so does price. Correlation can also be described by the slope of the line as well. The greater the slope, the greater the feature's effect on price.
+
+```{r Correlation scatterplots, message=FALSE, warning=FALSE}
+#Correlation Scatterplots for all NN variable for Crime, as an example:
+st_drop_geometry(MiamiProperties) %>% 
+  dplyr::select(SalePrice, crime_nn1, crime_nn2, crime_nn3, crime_nn4, crime_nn5, sexualoffenders_Buffer) %>%
+  gather(Variable, Value, -SalePrice) %>% 
+  ggplot(aes(Value, SalePrice)) +
+  geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~Variable, ncol = 3, scales = "free") +
+  labs(title = "Correlations between Sale Price and Crime Features") +
+  plotTheme()
+
+
+#Correlation Scatterplots for Variables of Interest
+st_drop_geometry(MiamiProperties) %>% 
+  mutate(Age = 2020 - EffectiveYearBuilt) %>%
+  dplyr::select(SalePrice, LivingSqFt, parks_nn1, MedHHInc, pctHH200kOrMore) %>%
+  #filter(SalePrice <= 1000000, Age < 500) %>%
+  gather(Variable, Value, -SalePrice) %>% 
+  ggplot(aes(Value, SalePrice)) +
+  geom_point(size = .5) + geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~Variable, ncol = 3, scales = "free") +
+  labs(title = "Price as a function of continuous variables") +
+  plotTheme()
+```
+
+
 Include bar charts to visualize correlation for non-numeric variables?
+```{r Categorical variable charts, message=FALSE, warning=FALSE}
+st_drop_geometry(MiamiProperties) %>%
+  dplyr::select(SalePrice, Halfmile_metro, Stories, pool, singlefamily, elevator, luxury)%>%
+  gather(Variable,Value, -SalePrice)%>%
+  ggplot(aes(Value, SalePrice))+
+  geom_bar(position="dodge",stat="summary", fun.y="mean")+
+  facet_wrap(~Variable, ncol=1, scales="free")+
+  plotTheme()
+```
 
 Figure x depicts the spatial distribution of sale prices (or price per square foot) across Miami and Miami Beach. The map suggests that prices are clustered within the city, rather than randomly distributed. 
-1 map of dependent variable (sale price)
 
-Need some text for these once we decide what to include
-3 maps of 3 most interesting independent variables
-Any other maps/graphs/charts of interest 
+```{r Sale price map, message=FALSE, warning=FALSE}
+Miami.Plot<-
+  MiamiProperties%>%
+  mutate(PricePerSq=SalePrice/ActualSqFt)
+
+ggplot()+
+  geom_sf(data=all_nhoods_MB, fill="grey40")+
+  geom_sf(data=Miami.Plot, aes(colour=q5(PricePerSq)),
+          show.legend="point", size=.75)+
+  scale_colour_manual(values=palette5,
+                      labels=qBr(Miami.Plot, "PricePerSq"),
+                      name="Quintile\nBreaks")+
+  labs(title="Price Per Square Foot, Miami") +
+  mapTheme()
+```
 
 
-# 4. Model Building
+```{r independent variable maps, message=FALSE, warning=FALSE}
+#density of sexual offenders
+sexual_offend_map<-
+  miami.sexualoffenders%>%
+  st_intersection(all_nhoods)
 
-# 5. Cross Validation
+ggplot() + geom_sf(data = all_nhoods_MB, fill = "grey40") +
+  stat_density2d(data = data.frame(st_coordinates(sexual_offend_map)), 
+                 aes(X, Y, fill = ..level.., alpha = ..level..),
+                 size = 0.01, bins = 40, geom = 'polygon') +
+  scale_fill_gradient(low = "#25CB10", high = "#FA7800", name = "Density") +
+  scale_alpha(range = c(0.00, 0.35), guide = FALSE) +
+  labs(title = "Density of Sexual Offenders in Miami") +
+  mapTheme()
+
+#Parks
+Parks_map<-
+  Parks%>%
+  st_intersection(all_nhoods_MB)
+ggplot()+
+  geom_sf(data=all_nhoods_MB, fill="grey40")+
+  geom_sf(data=Parks_map, size=1, color="lightgreen")+
+  labs(title="Park Locations") +
+  mapTheme()
+
+#Neighborhood Boundaries
+ggplot()+
+  geom_sf(data=all_nhoods_MB) +
+  labs(title="Neighborhood Boundaries") +
+  mapTheme()
+```
+
+# 3. Methods
+
+  - Gathering Data (brief description, code is provided in section above)
+  - Creating Features (brief description, code is provided in section above)
+  - Testing for correlation (brief description, code is provided in section above)
+  - Building Models (brief description & code)
+        - one example model
+        - provide written interpretation
+        - trimmed/altered from the initial model
+        - stepwise function process
+        - final model (describe why we added a few more vars that we created)
+        - add stargazer table with all regs models to compare
+  - Cross Validating (describe, code shown in results below?)
+
+## Model Building
+
+## Cross Validation
 
 # 6. Predicitons
