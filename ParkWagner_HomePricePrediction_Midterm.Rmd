@@ -460,6 +460,43 @@ MiamiProperties<-
 # 3. Test for correlation
 
 # 4. Model Building
+```{r}
+reg1 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+                  dplyr::select(SalePrice, LotSize, Bed, Bath, Age, 
+                                ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
+                                singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
+                                pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist, pctHH200kOrMore))
+summary(reg_initial)
+## trimmed/ cleaned up model from the inital model
+
+##stepwise backward function
+step( lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+           dplyr::select(SalePrice, LotSize, Bed, Bath, Age, 
+                         ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
+                         singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
+                         pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist,pctHH200kOrMore)), direction="backward")
+##output
+reg3 <- step( lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+                           dplyr::select(SalePrice, LotSize, Bed, Bath, Age, 
+                                         ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
+                                         singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
+                                         pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, pctHH200kOrMore)), direction="backward")
+summary(reg3)
+
+#crime_nn5
+reg4 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+                    dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedRent, MedHHInc, pctBlackorHis, pctBachelors, pool, 
+                                  singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, crime_nn5))
+summary(reg4)
+#crime buffer
+reg5 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+             dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedRent, MedHHInc, pctBlackorHis, pctBachelors, pool, 
+                            singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, sexualoffenders_Buffer))
+summary(reg5)
+
+
+stargazer(reg1, reg3, reg4, reg5, type = "latex")
+```
 
 # 5. Cross Validation
 
