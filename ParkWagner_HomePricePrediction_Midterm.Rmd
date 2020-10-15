@@ -155,6 +155,8 @@ library(broom.mixed)
 library(osmdata)
 library(geosphere)
 library(tidycensus)
+library(kableExtra)
+library(stargazer)
 
 options(scipen=999)
 options(tigris_class = "sf")
@@ -247,6 +249,18 @@ This analysis uses data from a variety of sources: we derived physical character
 ## Data Gathering: Description & Code
 We accessed data for the analysis via the Miami-Dade County Open Data Hub API and using the osmdata package to access OpenStreetMap variables of interest. Most of the data required manipulation and cleaning before being explored. This process included transformations in order to maximize the effectiveness of prediction for each variable. The code below presents the steps in the data gathering process. 
 
+```{r}
+text_tabl <-data.frame(
+  Datasets = c("Miami Home Dataset", "Coastline Data", "Bars, Pubs, & Restaurant Data", "Sexual Offenders Data", "Miami Park Facilities Data","Miami-Dade Transit (MDT) Metromover and Metrorail stations", "2014-2018 ACS 5-year Estimates"),
+  Source = c("Provided", "OpenStreetMap", "OpenStreetMap", "Miami-Dade County Open Data Hub", "Miami-Dade County Open Data Hub", "Miami-Dade County Open Data Hub", "U.S. Census Bureau")
+)
+
+kbl(text_tabl) %>%
+  kable_paper(c("hover", "condensed"), full_width = F, html_font = "Montserrat") %>%
+  kable_styling (bootstrap_options = "striped", "condensed", font_size = 10) %>%
+  row_spec(0, bold = T, color = "white", background = "dodgerblue", font_size = 14)
+```
+
 **Loading Basemap**
 
 ```{r Basemap, message=FALSE, warning=FALSE}
@@ -266,14 +280,18 @@ ymax = st_bbox(miami.base)[[4]]
 
 ```{r Load Data, message=FALSE, warning=FALSE, results=FALSE}
 MiamiProperties<-
-  st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")%>%
-  #st_read("/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson") %>%
+  #st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")%>%
+  st_read("/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson") %>%
   
   mutate(pool = ifelse(str_detect((XF1), "Pool") | str_detect((XF2), "Pool") | str_detect((XF3), "Pool"), "Pool", "No Pool")) %>% 
   mutate(singlefamily = ifelse(str_detect(Zoning, "SINGLE FAMILY"), "Yes", "No")) %>%
+  mutate(estates = ifelse(str_detect(Zoning, "ESTATES"), "Yes", "No")) %>%
+  mutate(dock = ifelse(str_detect((XF1), "Dock") | str_detect((XF2), "Dock") | str_detect((XF3), "Dock"), "Dock", "No Dock")) %>%
   mutate(Age = (2020 - EffectiveYearBuilt),0) %>%
   mutate(luxury=ifelse(str_detect((XF1), "Luxury") | str_detect((XF2), "Luxury") | str_detect((XF3), "Luxury"), "Yes", "No")) %>%
   mutate(elevator=ifelse(str_detect((XF1), "Elevator") | str_detect((XF2), "Elevator") | str_detect((XF3), "Elevator"), "Yes", "No")) %>%
+  mutate(Gazebo=ifelse(str_detect((XF1), "Gazebo") | str_detect((XF2), "Gazebo") | str_detect((XF3), "Gazebo"), "Yes", "No")) %>%
+  mutate(BeachView=ifelse(str_detect((Legal1), "BEACH VIEW") | str_detect((Legal2), "BEACH VIEW") | str_detect((Legal3), "BEACH VIEW"), "Yes", "No")) %>%
   dplyr::select(-Land, -Year,-Bldg, -Total, -Assessed,  -saleDate, -saleType, -saleQual, -County.Senior, -County.LongTermSenior, -County.Other.Exempt, -Owner1, -Owner2, 
                 -Mailing.Address, -Mailing.City, -Mailing.State, -Mailing.Zip, -Mailing.Country, -YearBuilt,
                 -City.Senior, -City.LongTermSenior, -City.Other.Exempt, -Legal1, -Legal2, -Legal3, -Legal4, -Legal5, -Legal6, -XF1, -XF2, -XF3,
@@ -326,7 +344,7 @@ all_nhoods_MB<-
   st_crop(miami.base_map)
 ```
 
-**Calculating Distance to Coastline; Caculating proximity to Bars, Pubs, and Restaurants; Sexual Offenses; Parks; and Public Transportation**
+**Calculating Distance to Coastline; Calculating proximity to Bars, Pubs, and Restaurants; Sexual Offenses; Parks; and Public Transportation**
 
 ```{r Feature Engineering, message=FALSE, warning=FALSE, cache=TRUE}
 ## Calculate the distance to Coastline (this calculation has to be in WGS84)
@@ -570,6 +588,26 @@ MiamiProperties<-
 ### Variables:
 Present a table of summary statistics with variable descriptions. Sort these variables by their category (internal characteristics, amenities/public services or spatial structure). Check out the `stargazer` package for this.
 
+
+```{r}
+engin_vars_table <-data.frame(
+  Variable = c("CoastDist", "milecoast", "bars_nn1 ~ 5", "bars_Buffer", "crime_nn1 ~ 5","sexualoffenders_Buffer", "park_nn1 ~ 5", "parks.Buffer" , "metro_nn1", "Halfmile_metro","pctWhite", "pctBlack", "pctHis", "pctBlackorHis", "pctBachelors","pctPoverty", "pctCarCommute", "pctPubCommute", "pctOwnerHH", "pctRenterHH", "pctNoMortgage", "pctOwnerSince2010", "pctHH200kOrMore", "pool", "singlefamily", "estates", "dock", "Age", "luxury", "elevator", "BeachView"),
+  Dataset = c("OpenStreetMap", "OpenStreetMap", "OpenStreetMap", "OpenStreetMap", "Miami-Dade County Open Data Hub", "Miami-Dade County Open Data Hub", "Miami-Dade County Open Data Hub", "Miami-Dade County Open Data Hub", "Miami-Dade County Open Data Hub", "Miami-Dade County Open Data Hub", "Miami-Dade County Open Data Hub", "U.S. Census Bureau", "U.S. Census Bureau", "U.S. Census Bureau", "U.S. Census Bureau", "U.S. Census Bureau", "U.S. Census Bureau", "U.S. Census Bureau", "U.S. Census Bureau", "U.S. Census Bureau", "U.S. Census Bureau", "U.S. Census Bureau", "U.S. Census Bureau", "Provide Miami Housing Data", "Provide Miami Housing Data", "Provide Miami Housing Data", "Provide Miami Housing Data", "Provide Miami Housing Data", "Provide Miami Housing Data", "Provide Miami Housing Data", "Provide Miami Housing Data"),
+  Description = c("Distance to coast", "Units within a mile from the coast", "Average distances of 1-5 bars", "Number of bars within half mile from a housing units", "Average distances of 1-5 registered sexual offenders", "Number of sexual offenders within half mile from a housing unit", "Average distances of 1-5 parks", "Number of parks within half mile from the unit", "Distance to closest metrorail station", "Units within half mile from a metrorail stations", "Percentage of White population", "Percentage of Black population", "Percentage of Hispanic populaiton", "Percentage of Black and Hispanic population", "Percentage of population with at least Bachelor's degree", "Percentage of population below the poverty line", "Percentage of population communiting by car", "Percentage of population commuting by public transit", "Percentage of households in owner-occupied units", "Percentage of households in renter-occupied units", "Percentage of households with no mortgage", "Percentage of households who owned the house since 2010 or later", "Percentage of households with income of $200K or more", "Units with a pool", "Single Family zoning units", "Estates Zoning Units", "Units with a dock", "Age of the units", "Units with luxuary amenitiss", "Units with an elevator", "Units with a beach view"),
+  "Data type" = c("continuous", "categorical", "continuous", "continuous", "continuous", "continuous", "continuous", "continuous", "continuous", "categorical", "continuous", "continuous", "continuous", "continuous", "continuous", "continuous", "continuous","continuous", "continuous", "continuous", "continuous", "continuous", "continous", "categorical", "categorical", "categorical", "categorical", "continous", "categorical", "categorical", "categorical"),
+  "Final model" = c("No", "No", "No", "No", "No", "Yes", "Yes", "No", "No", "Yes", "No", "No", "Yes", "No", "Yes", "No", "Yes", "No", "Yes", "No", "No", "No", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "No")
+)
+
+kbl(engin_vars_table) %>%
+  kable_paper(c("striped", "hover"), html_font = "Montserrat", full_width = F) %>%
+  kable_material() %>%
+  kable_styling (bootstrap_options = "striped", "condensed", font_size = 11) %>%
+  row_spec(0, bold = T, color = "white", background = "dodgerblue", font_size = 13)%>%
+  column_spec(1, bold = T) %>%
+  column_spec(2, width = "25%") %>%
+  column_spec(3, width = "40%")
+```
+
 ## Correlation:
 As part of the exploratory analysis, we examined correlation to assist in identifying features that may be useful for predicting sales price. A correlation matrix helps us visualize correlation across numeric variables. In the figures, the darker colors imply stronger correlation. These plot helps to determine features that are correlated to sale prices (see sale prices row) and variables that are correlated with each other. Figure 1 depicts a correlation plot of variables derived from the U.S. Census Bureau. Figure 2 depicts the correlation between the numeric features included in the final model. We developed several correlation matrices with additional variables in order to help determine features to include in the final model.
 
@@ -725,42 +763,52 @@ ggplot()+
 ## Model Building
 
 # 4. Model Building
-```{r}
+
+After exploring and testing correlations of all the variables, we have started our
+
+```{r, include = FALSE}
+## model with physical attributes of the housing
 reg1 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+                  dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, elevator, dock, BeachView, pool, luxury, singlefamily, estates))
+
+## add addtional engineered variables
+reg2 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+                  dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, 
+                                parks_nn1, MedRent, MedHHInc, pctBlackorHis, pctBachelors, pool, 
+                                pctOwnerHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
+                                pctPoverty, Halfmile_metro, CoastDist, pctHH200kOrMore, elevator, dock, luxuary, BeachView))
+
+## include almost all variables
+reg3 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
                   dplyr::select(SalePrice, LotSize, Bed, Bath, Age, 
                                 ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
                                 singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
-                                pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist, pctHH200kOrMore))
-summary(reg_initial)
-## trimmed/ cleaned up model from the inital model
+                                pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist, pctHH200kOrMore, luxury, elevator, dock, BeachView, estates))
+
 
 ##stepwise backward function
 step( lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
            dplyr::select(SalePrice, LotSize, Bed, Bath, Age, 
                          ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
                          singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
-                         pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist,pctHH200kOrMore)), direction="backward")
+                         pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist,pctHH200kOrMore, luxury, elevator, dock, estates)), direction="backward")
 ##output
-reg3 <- step( lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-                           dplyr::select(SalePrice, LotSize, Bed, Bath, Age, 
-                                         ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
-                                         singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
-                                         pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, pctHH200kOrMore)), direction="backward")
-summary(reg3)
-
-#crime_nn5
 reg4 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-                    dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedRent, MedHHInc, pctBlackorHis, pctBachelors, pool, 
-                                  singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, crime_nn5))
-summary(reg4)
-#crime buffer
+                           dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis , pctBachelors, pool, singlefamily, pctOwnerHH, 
+                                         pctNoMortgage,  pctCarCommute, pctHH200kOrMore , luxury, elevator, dock , estates))
+
+# add crim_nn5 to reg5
 reg5 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
-             dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedRent, MedHHInc, pctBlackorHis, pctBachelors, pool, 
-                            singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, sexualoffenders_Buffer))
-summary(reg5)
-
-
-stargazer(reg1, reg3, reg4, reg5, type = "latex")
+                    dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedRent, MedHHInc, pctBlackorHis, pctBachelors, pool, 
+                                  singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, luxury, elevator, dock, crime_nn5, BeachView, estates))
+summary(reg4)
+#add crime buffer to reg5
+reg6 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+             dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedHHInc, pctHis, pctBachelors, pool, 
+                            singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, luxury, elevator, dock, sexualoffenders_Buffer, estates))
+```
+```{r, echo = TRUE, warning = FALSE, results = "asis"}
+stargazer(reg1, reg2, reg3, reg4, reg5, reg6, type = "html")
 ```
 
 ## Cross Validation
