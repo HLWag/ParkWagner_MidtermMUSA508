@@ -536,7 +536,7 @@ MiamiProperties<-
 ```
 
 **Adding Neighborhood and Elementary School Names to Each Home**
-
+Update this to include the correct centroid function
 ```{r Neighborhood, message=FALSE, warning=FALSE, results='hide'}
 #Add Elementary School Name to Each Property
 elementary.school.clean<-
@@ -544,14 +544,10 @@ elementary.school.clean<-
   dplyr::select(NAME)%>%
   rename(elem_name=NAME)
 
-MiamiProperties<-
-  MiamiProperties%>%
-  st_join(elementary.school.clean)
+MiamiProperties <- st_join(st_centroid(MiamiProperties), elementary.school.clean, left = TRUE)
 
 #Add neighborhood name to each property
-MiamiProperties<-
-  MiamiProperties%>%
-  st_join(all_nhoods_MB)#updated to include more designations in MB (note these are numbers not names)
+MiamiProperties <- st_join(st_centroid(MiamiProperties), all_nhoods, left = TRUE)
 
 #Add variable for Miami or Miami Beach
 MiamiProperties<-
@@ -636,19 +632,34 @@ tracts18 <-
          pctHH200kOrMore = (ifelse(TotalHH > 0, (HH200k/ TotalHH),0))*100,
          year = "2018") %>%
   mutate(MedHHInc = replace_na(MedHHInc, 0),
-         MedRent = replace_na(MedRent,0)) %>%
+         MedRent = replace_na(MedRent,0),
+         pctBachelors= replace_na(pctBachelors,0),
+         pctHis= replace_na(pctHis,0),
+         pctOwnerHH= replace_na(pctOwnerHH,0),
+         pctCarCommute= replace_na(pctCarCommute,0),
+         pctHH200kOrMore= replace_na(pctHH200kOrMore,0)) %>%
   dplyr::select(-Whites, -Blacks, -FemaleBachelors, -MaleBachelors, -TotalPoverty, -CarCommute, -PubCommute, -TotalCommute, -TotalHispanic)
 
 #merge the data into the MiamiProperties dataframe
-MiamiProperties <-st_join(MiamiProperties,tracts18, )
+MiamiProperties <-st_join((st_centroid(MiamiProperties)),tracts18, left =TRUE) %>%
+                    mutate(MedHHInc = replace_na(MedHHInc, 0),
+                           MedRent = replace_na(MedRent,0),
+                           pctBachelors= replace_na(pctBachelors,0),
+                           pctHis= replace_na(pctHis,0),
+                           pctOwnerHH= replace_na(pctOwnerHH,0),
+                           pctCarCommute= replace_na(pctCarCommute,0),
+                           pctHH200kOrMore= replace_na(pctHH200kOrMore,0))
 ```
 
 **Completing Feature Engineering and Filtering Out Homes Where Sales Prices Have Been Removed**
 
 ```{r remove toPredict, message=FALSE, warning=FALSE, results='hide'}
-MiamiPropertiesAll<-MiamiProperties
+## create dataframe of homes to predict
+MiamiPropertiesPred<-
+  MiamiProperties %>%
+  filter(toPredict == 1)
 
-#filter out the houses that we will need to predict
+## create dataframe of rest of the homes
 MiamiProperties<-
   MiamiProperties%>%
   filter(toPredict == 0)
@@ -748,11 +759,11 @@ Some of the features included in the analysis are categorical rather than numeri
 
 ```{r Categorical variable charts, message=FALSE, warning=FALSE}
 st_drop_geometry(MiamiProperties) %>%
-  dplyr::select(SalePrice, pool, elevator, dock)%>%
+  dplyr::select(SalePrice, pool, elevator, luxury)%>%
   gather(Variable,Value, -SalePrice)%>%
   ggplot(aes(Value, SalePrice))+
   geom_bar(position="dodge",stat="summary", fun.y="mean")+
-  facet_wrap(~Variable, ncol=1, scales="free")+
+  facet_wrap(~Variable, ncol=3, scales="free")+
   labs(title = "Price as a Function of Categorical Variables",
        caption="Figure 5. Correlation between Selected Categorical Variables and Average Sale Price") +
   plotTheme()
@@ -777,7 +788,7 @@ ggplot()+
   mapTheme()
 ```
 
-The maps below depict independent variables included in the final model. Figure 7 depicts the density of sexual offenders and predators in Miami and Miami Beach. The locations with the greatest density of sexual offenders and predators in the norther portions of Miami. Figure 8 shows the locations of County
+The maps below depict independent variables included in the final model. Figure 7 depicts the density of sexual offenders and predators in Miami and Miami Beach. The locations with the greatest density of sexual offenders and predators in the northern portions of Miami. Figure 8 shows the locations of County, Municipal, State, and Federal Park Facilities in the area. Parks are fairly evenly distributed throughout the area, with a slightly lesser density of parks further inland. Figure 9 shows the locations of single-family and multi-family homes. Many single family homes are clustered along the shorline, with multi-family homes largely located further inland.  
 
 ```{r independent variable maps, message=FALSE, warning=FALSE}
 #density of sexual offenders
@@ -888,14 +899,471 @@ reg6 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>%
                             singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, luxury, elevator, dock, sexualoffenders_Buffer, estates))
 ```
 
-```{r, echo = TRUE, warning = FALSE, results = "asis"}
+```{r, echo = TRUE, warning = FALSE, results = 'asis'}
 stargazer(reg1, reg2, reg3, reg4, reg5, reg6, type = "html")
 ```
 
-## Cross Validation
+# 4. Results
+-Split the ‘toPredict’ == 0 into a separate training and test set.
+-Provide a polished table of your (training set) lm summary results (coefficients, R2 etc).
+-Provide a polished table of mean absolute error and MAPE for a single test set. Check out the “kable” function for markdown to create nice tables.
+-Provide the results of your cross-validation tests. This includes mean and standard deviation MAE. Do 100 folds and plot your cross-validation MAE as a histogram. Is your model generalizable to new data?
+-Plot predicted prices as a function of observed prices
+-Provide a map of your residuals for your test set. Include a Moran’s I test and a plot of the spatial lag in errors. 5
+-Provide a map of your predicted values for where ‘toPredict’ is both 0 and 1.
+-Using the test set predictions, provide a map of mean absolute percentage error (MAPE) by neighborhood. 
+-Provide a scatterplot plot of MAPE by neighborhood as a function of mean price by neighborhood. 
+-Using tidycensus, split your city in to two groups (perhaps by race or income) and test your model’s generalizability. Is your model generalizable?
 
+To test our selected model, we randomly divided our master dataset, MiamiProperties, into separate training (60%) and test (40%) sets. Table 2 
+
+```{r Training & Test Sets, message=FALSE, warning=FALSE, results='asis'}
+# set random seed
+set.seed(31337)
+
+# get index for training sample
+inTrain <- caret::createDataPartition(
+  y = paste(MiamiProperties$Neighborhood),
+  p = .60, list = FALSE)
+# split data into training and test
+Miami.training <- MiamiProperties[inTrain,] 
+Miami.test     <- MiamiProperties[-inTrain,]  
+
+anyNA(MiamiProperties$estates)
+#Regression
+reg_final_train <- lm(SalePrice ~ ., data = st_drop_geometry(Miami.training) %>% 
+                  dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedHHInc, pctHis, pctBachelors, pool, 
+                                singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, luxury, elevator, dock, sexualoffenders_Buffer, estates))
+
+stargazer(reg_final_train, type = "html", main="Training Set Model Summary Results", caption="Table 2. Model Summary Results for Training Dataset")
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+## predicting on new data
+reg_final_predict <- predict(reg_final_train, newdata = Miami.test)
+
+
+## Mean Square Error train and test
+rmse.train <- caret::MAE(predict(reg_final_train), Miami.training$SalePrice)
+rmse.test  <- caret::MAE(reg_final_predict, Miami.test$SalePrice)
+
+cat("Train MAE: ", as.integer(rmse.train), " \n","Test MAE: ", as.integer(rmse.test))
+
+
+#Plotting accuracy metrics
+preds.train <- data.frame(pred   = predict(reg_final_train),
+                          actual = Miami.training$SalePrice,
+                          source = "training data")
+preds.test  <- data.frame(pred   = reg_final_predict,
+                          actual = Miami.test$SalePrice,
+                          source = "testing data")
+preds <- rbind(preds.train, preds.test)
+
+ggplot(preds, aes(x = pred, y = actual, color = source)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = "green") +
+  geom_abline(color = "orange") +
+  coord_equal() +
+  theme_bw() +
+  facet_wrap(~source, ncol = 2) +
+  labs(title = "Comparing predictions to actual values",
+       x = "Predicted Value",
+       y = "Actual Value") +
+  theme(
+    legend.position = "none"
+  )
+
+```
+
+```{r, message=FALSE, warning=FALSE}
+##### PREDICTION #####
+secret_data <- MiamiPropertiesPred
+secret_preds <- predict(reg6, newdata = secret_data)
+output_preds <- data.frame(prediction = secret_preds, Folio = secret_data$Folio, team_name = "Miami Heat Predictors")
+write.csv(output_preds, "Miami Heat Predictors.csv")
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+########### CROSS- VALIDATION ##########
+
+#Generalizability - cross validation
+fitControl <- trainControl(method = "cv", number = 100, savePredictions = TRUE)
+set.seed(825)
+
+reg.cv <- 
+  train(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
+          dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedHHInc, pctHis, pctBachelors, pool, 
+                        singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, luxury, elevator, dock, sexualoffenders_Buffer, estates), 
+        method = "lm", trControl = fitControl, na.action = na.pass)
+
+reg.cv
+
+reg.cv$resample
+
+reg.cv$resample %>% 
+  pivot_longer(-Resample) %>% 
+  mutate(name = as.factor(name)) %>% 
+  ggplot(., aes(x = name, y = value, color = name)) +
+  geom_jitter(width = 0.1) +
+  facet_wrap(~name, ncol = 3, scales = "free") +
+  theme_bw() +
+  theme(
+    legend.position = "none"
+  )
+
+# extract predictions from CV object
+cv_preds <- reg.cv$pred
+nrow(MiamiProperties)
+nrow(cv_preds)
+
+#Create dataset with "out of fold" predictions and original data
+map_preds <- MiamiProperties %>% 
+  rowid_to_column(var = "rowIndex") %>% 
+  left_join(cv_preds, by = "rowIndex") %>% 
+  mutate(SalePrice.AbsError = abs(pred - SalePrice)) %>% 
+  cbind(st_coordinates(st_centroid((.))))
+
+st_crs(map_preds) <- st_crs(all_nhoods)
+
+# plot errors on a map
+ggplot() +
+  geom_sf(data = all_nhoods_MB, fill = "grey40") +
+  geom_sf(data = map_preds, aes(colour = q5(SalePrice.AbsError)),
+          show.legend = "point", size = 1) +
+  scale_colour_manual(values = palette5,
+                      labels=qBr(map_preds,"SalePrice.AbsError"),
+                      name="Quintile\nBreaks") +
+  labs(title="Absolute sale price errors on the OOF set",
+       subtitle = "OOF = 'Out Of Fold'") +
+  mapTheme()
+
+#Start Ch4
+k_nearest_neighbors = 20
+#prices
+coords <- st_coordinates(st_centroid(MiamiProperties)) 
+# k nearest neighbors
+neighborList <- knn2nb(knearneigh(coords, k_nearest_neighbors))
+spatialWeights <- nb2listw(neighborList, style="W")
+MiamiProperties$lagPrice <- lag.listw(spatialWeights, MiamiProperties$SalePrice)
+
+
+#errors
+Miami.test <-
+  Miami.test %>%
+  mutate(Regression = "Baseline Regression",
+         SalePrice.Predict = ifelse((predict(reg_final_train, Miami.test)) < 0, mean(Miami.training$SalePrice), predict(reg_final_train, Miami.test)),
+         SalePrice.Error = SalePrice.Predict - SalePrice,
+         SalePrice.AbsError = abs(SalePrice.Predict - SalePrice),
+         SalePrice.APE = (abs(SalePrice.Predict - SalePrice)) / abs(SalePrice.Predict))%>%
+  mutate(SalePrice.AbsError = replace_na(SalePrice.AbsError, 0))%>%
+  mutate(SalePrice.Error=replace_na(SalePrice.Error, 0))
+
+coords.test <-  st_coordinates(st_centroid(Miami.test)) 
+neighborList.test <- knn2nb(knearneigh(coords.test, k_nearest_neighbors))
+spatialWeights.test <- nb2listw(neighborList.test, style="W")
+Miami.test$lagPriceError <- lag.listw(spatialWeights.test, Miami.test$SalePrice.AbsError)
+
+summary(Miami.test$SalePrice.AbsError)
+
+##lag of price
+
+Miami.test %>% 
+  mutate(lagPriceError = lag.listw(spatialWeights.test, SalePrice.AbsError))
+
+ggplot(MiamiProperties, aes(x=lagPrice, y=SalePrice)) +
+  geom_point(colour = "#FA7800") +
+  geom_smooth(method = "lm", se = FALSE, colour = "#25CB10") +
+  labs(title = "Price as a function of the spatial lag of price",
+       caption = "Public Policy Analytics, Figure 6.6",
+       x = "Spatial lag of price (Mean price of 5 nearest neighbors)",
+       y = "Sale Price") +
+  plotTheme()
+
+ggplot(Miami.test, aes(x=lagPriceError, y=SalePrice)) +
+  geom_point(colour = "#FA7800") +
+  geom_smooth(method = "lm", se = FALSE, colour = "#25CB10") +
+  labs(title = "Error as a function of the spatial lag of price",
+       caption = "",
+       x = "Spatial lag of errors (Mean error of 5 nearest neighbors)",
+       y = "Sale Price") +
+  plotTheme()
+
+
+#Moran's I - A measure of spatial correlation
+moranTest <- moran.mc(Miami.test$SalePrice.AbsError, 
+                      spatialWeights.test, nsim = 999)
+
+ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
+  geom_histogram(binwidth = 0.01) +
+  geom_vline(aes(xintercept = moranTest$statistic), colour = "#FA7800",size=1) +
+  scale_x_continuous(limits = c(-1, 1)) +
+  labs(title="Observed and permuted Moran's I",
+       subtitle= "Observed Moran's I in orange",
+       x="Moran's I",
+       y="Count",
+       caption="Miami") +
+  plotTheme()
+
+# this plot shows that there is spatial correlation 
+
+## Provide a map of your predicted values for where ‘toPredict’ is both 0 and 1.
+
+#Errors by group - Neighborhood, Elementary School
+##Neighborhood
+nhood_sum <- Miami.test %>% 
+  group_by(Neighborhood) %>%
+  summarize(meanPrice = mean(SalePrice, na.rm = T),
+            meanPrediction = mean(SalePrice.Predict, na.rm = T),
+            meanMAE = mean(SalePrice.AbsError, na.rm = T))
+
+nhood_sum %>% 
+  st_drop_geometry %>%
+  arrange(desc(meanMAE)) %>% 
+  kable() %>% kable_styling()
+
+map_preds_sum <- map_preds %>% 
+  group_by(Neighborhood) %>% 
+  summarise(meanMAE = mean(SalePrice.AbsError))
+
+ggplot() +
+  geom_sf(data = all_nhoods %>% 
+            left_join(st_drop_geometry(map_preds_sum), by = "Neighborhood"),
+          aes(fill = q5(meanMAE))) +
+  scale_fill_manual(values = palette5,
+                    labels=qBr(nhood_sum,"meanMAE"),
+                    name="Quintile\nBreaks") +
+  mapTheme() +
+  labs(title="Absolute sale price errors on the OOF set by Neighborhood")
+
+reg.nhood <- lm(SalePrice ~ ., data = as.data.frame(Miami.training) %>% 
+                  dplyr::select(Neighborhood, SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedHHInc, pctHis, pctBachelors, pool, 
+                                singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, luxury, elevator, dock, sexualoffenders_Buffer, estates))
+
+
+
+Miami.test.nhood <-
+  Miami.test %>%
+  mutate(Regression = "Neighborhood Effects",
+         SalePrice.Predict = ifelse((predict(reg.nhood, Miami.test)) < 0, mean(Miami.training$SalePrice), predict(reg.nhood, Miami.test)),
+         SalePrice.Error = SalePrice - SalePrice.Predict,
+         SalePrice.AbsError = abs(SalePrice - SalePrice.Predict),
+         SalePrice.APE = (abs(SalePrice - SalePrice.Predict)) / abs(SalePrice)) %>%
+  mutate(SalePrice.AbsError = replace_na(SalePrice.AbsError, 0))%>%
+  mutate(SalePrice.Error=replace_na(SalePrice.Error, 0))
+
+bothRegressions <- 
+  rbind(
+    dplyr::select(Miami.test, starts_with("SalePrice"), Regression, Neighborhood) %>%
+      mutate(lagPriceError = lag.listw(spatialWeights.test, SalePrice.Error)),
+    dplyr::select(Miami.test.nhood, starts_with("SalePrice"), Regression, Neighborhood) %>%
+      mutate(lagPriceError = lag.listw(spatialWeights.test, SalePrice.Error)))    
+
+
+st_drop_geometry(bothRegressions) %>%
+  gather(Variable, Value, -Regression, -Neighborhood) %>%
+  filter(Variable == "SalePrice.AbsError" | Variable == "SalePrice.APE") %>%
+  group_by(Regression, Variable) %>%
+  summarize(meanValue = mean(Value, na.rm = T)) %>%
+  spread(Variable, meanValue) %>%
+  kable() %>%
+  kable_styling("striped", full_width = F) %>%
+  row_spec(1, color = "black", background = "#25CB10") %>%
+  row_spec(2, color = "black", background = "#FA7800")
+
+bothRegressions %>%
+  dplyr::select(SalePrice.Predict, SalePrice, Regression) %>%
+  ggplot(aes(SalePrice, SalePrice.Predict)) +
+  geom_point() +
+  stat_smooth(aes(SalePrice, SalePrice), 
+              method = "lm", se = FALSE, size = 1, colour="#FA7800") + 
+  stat_smooth(aes(SalePrice.Predict, SalePrice), 
+              method = "lm", se = FALSE, size = 1, colour="#25CB10") +
+  facet_wrap(~Regression) +
+  labs(title="Predicted sale price as a function of observed price",
+       subtitle="Orange line represents a perfect prediction; Green line represents prediction") +
+  plotTheme() + theme(plot.title = element_text(size = 18, colour = "black")) 
+
+#map MAPE by neighborhoods
+st_drop_geometry(bothRegressions) %>%
+  group_by(Regression, Neighborhood) %>%
+  summarize(mean.MAPE = mean(SalePrice.APE, na.rm = T)) %>%
+  ungroup() %>% 
+  left_join(all_nhoods) %>%
+  st_sf() %>%
+  ggplot() + 
+  geom_sf(aes(fill = mean.MAPE)) +
+  geom_sf(data = bothRegressions, colour = "black", size = .5) +
+  facet_wrap(~Regression) +
+  scale_fill_gradient(low = palette5[1], high = palette5[5],
+                      name = "MAPE") +
+  labs(title = "Mean test set MAPE by neighborhood") +
+  mapTheme()
+
+
+#Race Context and Income Context (from book)
+tracts18 <- 
+  tracts18%>%
+  mutate(raceContext = ifelse(pctWhite > .75, "Majority White", "Majority Non-White"),
+         incomeContext = ifelse(MedInc > 32322, "High Income", "Low Income"))
+
+grid.arrange(ncol = 2,
+             ggplot() + geom_sf(data = na.omit(tracts18), aes(fill = raceContext)) +
+               scale_fill_manual(values = c("#25CB10", "#FA7800"), name="Race Context") +
+               labs(title = "Race Context") +
+               mapTheme() + theme(legend.position="bottom"), 
+             ggplot() + geom_sf(data = na.omit(tracts18), aes(fill = incomeContext)) +
+               scale_fill_manual(values = c("#25CB10", "#FA7800"), name="Income Context") +
+               labs(title = "Income Context") +
+               mapTheme() + theme(legend.position="bottom"))
+
+st_join(st_centroid(bothRegressions), tracts18) %>% 
+  group_by(Regression, raceContext) %>%
+  summarize(mean.MAPE = scales::percent(mean(SalePrice.APE, na.rm = T))) %>%
+  st_drop_geometry() %>%
+  spread(raceContext, mean.MAPE) %>%
+  kable(caption = "Test set MAPE by neighborhood racial context") %>%
+  kable_styling("striped", full_width = F)
+
+st_join(st_centroid(bothRegressions), tracts18) %>% 
+  filter(!is.na(incomeContext)) %>%
+  group_by(Regression, incomeContext) %>%
+  summarize(mean.MAPE = scales::percent(mean(SalePrice.APE, na.rm = T))) %>%
+  st_drop_geometry() %>%
+  spread(incomeContext, mean.MAPE) %>%
+  kable(caption = "Test set MAPE by neighborhood income context") %>%
+  kable_styling("striped", full_width = F)
+
+##Elementary School
+elem_sum <- Miami.test %>% 
+  group_by(elem_name) %>%
+  summarize(meanPrice = mean(SalePrice, na.rm = T),
+            meanPrediction = mean(SalePrice.Predict, na.rm = T),
+            meanMAE = mean(SalePrice.AbsError, na.rm = T))
+
+elem_sum %>% 
+  st_drop_geometry %>%
+  arrange(desc(meanMAE)) %>% 
+  kable() %>% kable_styling()
+
+map_preds_sum_elem <- map_preds %>% 
+  group_by(elem_name) %>% 
+  summarise(meanMAE = mean(SalePrice.AbsError))
+
+ggplot() +
+  geom_sf(data = elem_map %>% 
+            left_join(st_drop_geometry(map_preds_sum_elem), by = "elem_name"),
+          aes(fill = q5(meanMAE))) +
+  scale_fill_manual(values = palette5,
+                    labels=qBr(nhood_sum,"meanMAE"),
+                    name="Quintile\nBreaks") +
+  mapTheme() +
+  labs(title="Absolute sale price errors on the OOF set by Elementary School District")
+
+
+reg.elem <- lm(SalePrice ~ ., data = as.data.frame(Miami.training) %>% 
+                  dplyr::select(elem_name, SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedHHInc, pctHis, pctBachelors, pool, 
+                                singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, luxury, elevator, dock, sexualoffenders_Buffer, estates))
+
+Miami.test.elem <-
+  Miami.test %>%
+  mutate(Regression = "Elementary School Effects",
+         SalePrice.Predict = predict(reg.elem, Miami.test),
+         SalePrice.Error = SalePrice - SalePrice.Predict,
+         SalePrice.AbsError = abs(SalePrice - SalePrice.Predict),
+         SalePrice.APE = (abs(SalePrice - SalePrice.Predict)) / abs(SalePrice)) %>%
+  mutate(SalePrice.AbsError = replace_na(SalePrice.AbsError, 0))%>%
+  mutate(SalePrice.Error=replace_na(SalePrice.Error, 0))
+
+threeRegressions <- 
+  rbind(
+    dplyr::select(Miami.test, starts_with("SalePrice"), Regression, Neighborhood, elem_name) %>%
+      mutate(lagPriceError = lag.listw(spatialWeights.test, SalePrice.Error)),
+    dplyr::select(Miami.test.nhood, starts_with("SalePrice"), Regression, Neighborhood, elem_name) %>%
+      mutate(lagPriceError = lag.listw(spatialWeights.test, SalePrice.Error)),
+    dplyr::select(Miami.test.elem, starts_with("SalePrice"), Regression, Neighborhood, elem_name) %>%
+      mutate(lagPriceError = lag.listw(spatialWeights.test, SalePrice.Error))) 
+
+
+st_drop_geometry(threeRegressions) %>%
+  gather(Variable, Value, -Regression, -Neighborhood,-elem_name) %>%
+  filter(Variable == "SalePrice.AbsError" | Variable == "SalePrice.APE") %>%
+  group_by(Regression, Variable) %>%
+  summarize(meanValue = mean(Value, na.rm = T)) %>%
+  spread(Variable, meanValue) %>%
+  kable() %>%
+  kable_styling("striped", full_width = F) %>%
+  row_spec(1, color = "black", background = "#25CB10") %>%
+  row_spec(2, color = "black", background = "#FA7800") %>%
+  row_spec(3, color="black", background = "#0082FA")
+
+threeRegressions %>%
+  dplyr::select(SalePrice.Predict, SalePrice, Regression) %>%
+  ggplot(aes(SalePrice, SalePrice.Predict)) +
+  geom_point() +
+  stat_smooth(aes(SalePrice, SalePrice), 
+              method = "lm", se = FALSE, size = 1, colour="#FA7800") + 
+  stat_smooth(aes(SalePrice.Predict, SalePrice), 
+              method = "lm", se = FALSE, size = 1, colour="#25CB10") +
+  facet_wrap(~Regression) +
+  labs(title="Predicted sale price as a function of observed price",
+       subtitle="Orange line represents a perfect prediction; Green line represents prediction") +
+  plotTheme() + theme(plot.title = element_text(size = 18, colour = "black")) 
+
+#map MAPE by neighborhoods (need to figure out how to add the elementary school basemap in here)
+st_drop_geometry(threeRegressions) %>%
+  group_by(Regression, Neighborhood, elem_name) %>%
+  summarize(mean.MAPE = mean(SalePrice.APE, na.rm = T)) %>%
+  ungroup() %>% 
+  left_join(all_nhoods) %>%
+  st_sf() %>%
+  ggplot() + 
+  geom_sf(aes(fill = mean.MAPE)) +
+  geom_sf(data = bothRegressions, colour = "black", size = .5) +
+  facet_wrap(~Regression) +
+  scale_fill_gradient(low = palette5[1], high = palette5[5],
+                      name = "MAPE") +
+  labs(title = "Mean test set MAPE by neighborhood") +
+  mapTheme()
+
+
+#Race Context and Income Context (from book)
+st_join(st_centroid(threeRegressions), tracts18) %>% 
+  group_by(Regression, raceContext) %>%
+  summarize(mean.MAPE = scales::percent(mean(SalePrice.APE, na.rm = T))) %>%
+  st_drop_geometry() %>%
+  spread(raceContext, mean.MAPE) %>%
+  kable(caption = "Test set MAPE by neighborhood racial context")
+
+st_join(st_centroid(threeRegressions), tracts18) %>% 
+  filter(!is.na(incomeContext)) %>%
+  group_by(Regression, incomeContext) %>%
+  summarize(mean.MAPE = scales::percent(mean(SalePrice.APE, na.rm = T))) %>%
+  st_drop_geometry() %>%
+  spread(incomeContext, mean.MAPE) %>%
+  kable(caption = "Test set MAPE by neighborhood income context")
+
+
+
+
+
+##### PREDICTION #####
+secret_data <- MiamiPropertiesPred
+secret_preds <- predict(reg5, newdata = secret_data)
+output_preds <- data.frame(prediction = secret_preds, Folio = secret_data$Folio, team_name = "Miami Heat Predictors")
+
+```
+# 5. Discussion 
+
+
+
+<<<<<<< HEAD
 # 6. Predicitons
 
 
 
+
+=======
+# 6. Conclusion
 
