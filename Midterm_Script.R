@@ -158,7 +158,7 @@ MiamiProperties1<-
   mutate(elevator=ifelse(str_detect((XF1), "Elevator") | str_detect((XF2), "Elevator") | str_detect((XF3), "Elevator"), "Yes", "No")) %>%
   mutate(Gazebo=ifelse(str_detect((XF1), "Gazebo") | str_detect((XF2), "Gazebo") | str_detect((XF3), "Gazebo"), "Yes", "No")) %>%
   mutate(BeachView=ifelse(str_detect((Legal1), "BEACH VIEW") | str_detect((Legal2), "BEACH VIEW") | str_detect((Legal3), "BEACH VIEW"), "Yes", "No")) %>%
-  dplyr::select(-Land, -Year,-Bldg, -Total, -Assessed,  -saleDate, -saleType, -saleQual, -County.Senior, -County.LongTermSenior, -County.Other.Exempt, -Owner1, -Owner2, 
+  dplyr::select(-Land, -Year,-Bldg, -Total, -Assessed, -saleType, -saleQual, -County.Senior, -County.LongTermSenior, -County.Other.Exempt, -Owner1, -Owner2, 
                 -Mailing.Address, -Mailing.City, -Mailing.State, -Mailing.Zip, -Mailing.Country, -YearBuilt,
                 -City.Senior, -City.LongTermSenior, -City.Other.Exempt, -Legal1, -Legal2, -Legal3, -Legal4, -Legal5, -Legal6, -XF1, -XF2, -XF3,
                 -WVDB, -HEX, -GPAR, -County.2nd.HEX, -City.2nd.HEX, -MillCode, -Zoning, -Land.Use)
@@ -176,6 +176,7 @@ MiamiProperties1 <-
   MiamiProperties1 %>%
   mutate(CoastDist=(geosphere::dist2Line(p=st_coordinates(st_centroid(MiamiProperties1)),
                                         line=st_coordinates(Coastline$osm_lines)[,1:2])*0.00062137)[,1])
+
 
 hist(MiamiProperties$CoastDist)
 
@@ -414,10 +415,8 @@ tracts18 <-
 
 
 #merge the data into the MiamiProperties dataframe
-MiamiProperties <-s_join(MiamiProperties,tracts18)
+MiamiProperties <-st_join((st_centroid(MiamiProperties)),tracts18, left =TRUE)
 
-MiamiProperties_test <- MiamiProperties
-MiamiProperties_test <- MiamiProperties_test[!duplicated(MiamiProperties_test), ]
 
 #Add Elementary School Name to Each Property
 elementary.school.clean<-
@@ -425,14 +424,23 @@ elementary.school.clean<-
   dplyr::select(NAME)%>%
   rename(elem_name=NAME)
 
-MiamiProperties<-
-  MiamiProperties%>%
-  st_join(elementary.school.clean, left = TRUE)
+MiamiProperties <- st_join(st_centroid(MiamiProperties), elementary.school.clean, left = TRUE)
 
 #Add neighborhood name to each property
+MiamiProperties <- st_join(st_centroid(MiamiProperties), all_nhoods, left = TRUE)
+
+
+## create dataframe of homes to predict
+MiamiPropertiesPred<-
+  MiamiProperties%>%
+  filter(toPredict == 1)
+
+## create dataframe of rest of the homes
 MiamiProperties<-
   MiamiProperties%>%
-  st_join(all_nhoods, left = TRUE)
+  filter(toPredict == 0)
+
+
 
 ##### EXPLORE VARIABLES #####
 #Selecting between multiple nn variables:
@@ -600,11 +608,6 @@ ggcorrplot(
 ###### BUILD REGRESSION MODELS ######
 MiamiPropertiesAll<-MiamiProperties
 
-#filter out the houses that we will need to predict
-MiamiProperties<-
-  MiamiProperties%>%
-  filter(toPredict == 0) 
-
 
 #hist(MiamiProperties$SalePrice)
 #hist(log(MiamiProperties$SalePrice))
@@ -696,6 +699,8 @@ Miami.test     <- MiamiProperties[-inTrain,]
 reg_final_train <- lm(SalePrice ~ ., data = st_drop_geometry(Miami.training) %>% 
                   dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedHHInc, pctHis, pctBachelors, pool, 
                                 singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, luxury, elevator, dock, sexualoffenders_Buffer, estates))
+anyNA(MiamiProperties$MedHHInc)
+
 
 plot(x = predict(reg_final_train), y = Miami.training$SalePrice)
 # Run this a number of times to see Adjusted R2
@@ -1101,7 +1106,6 @@ MiamiPropertiesAll <- MiamiProperties %>% distinct(geometry, .keep_all = TRUE)
 secret_data <- filter(MiamiProperties_test, toPredict == 1)
 
 secret_preds <- ifelse((predict(reg5, newdata = secret_data)) <0, mean(Miami.training$SalePrice), predict(reg5, newdata = secret_data))
-
 
 output_preds <- data.frame(prediction = secret_preds, Folio = secret_data$Folio, team_name = "Miami Heat Predictors")
 

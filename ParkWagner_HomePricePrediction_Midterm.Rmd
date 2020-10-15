@@ -640,7 +640,7 @@ tracts18 <-
   dplyr::select(-Whites, -Blacks, -FemaleBachelors, -MaleBachelors, -TotalPoverty, -CarCommute, -PubCommute, -TotalCommute, -TotalHispanic)
 
 #merge the data into the MiamiProperties dataframe
-MiamiProperties <-st_join(MiamiProperties,tracts18)
+MiamiProperties <-st_join(MiamiProperties,tracts18, )
 ```
 
 **Completing Feature Engineering and Filtering Out Homes Where Sales Prices Have Been Removed**
@@ -895,3 +895,7 @@ stargazer(reg1, reg2, reg3, reg4, reg5, reg6, type = "html")
 ## Cross Validation
 
 # 6. Predicitons
+
+
+
+
