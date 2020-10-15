@@ -803,7 +803,7 @@ reg4 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>%
                                          pctNoMortgage,  pctCarCommute, pctHH200kOrMore , luxury, elevator, dock , estates))
 ```
 
-The variables with crime factors were not part of the output from the stepwise backward function. However, we made a judgment that crime (proximity or density of sexual offenders as a proxy) is important factor in the predicting the price of a home. So we decided to try adding **"crime_5"**, which indicates the average distances of the 5 nearest sexual offenders, and **"sexualoffenders_Buffer"**, which indicates the number of sexual offenders in a half mile buffer of a home.
+The variables with crime factors were not part of the output from the stepwise backward function. However, we made a judgment call that crime (proximity or density of sexual offenders as a proxy) is important factor in the predicting the price of a home. So we decided to try adding **"crime_nn5"**, which indicates the average distances of the 5 nearest sexual offenders, and **"sexualoffenders_Buffer"**, which indicates the number of sexual offenders in a half mile buffer of a home.
 
 ```{r, include =TRUE}
 # add crim_nn5 to reg5
