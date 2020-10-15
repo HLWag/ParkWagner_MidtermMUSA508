@@ -840,6 +840,9 @@ ggplot()+
 # 4. Model Building
 After exploring and testing correlations of all the variables, we have started our
 ```{r Models, message=FALSE, warning=FALSE}
+
+#After exploring and testing correlations of all the variables, we have started our model building process by looking at only at physical attributes of the housing units **(reg1)**. Then we added additional engineered variables to see how the model performs **(reg2)**. In **reg3**, we included almost all variables, even the ones we have determined to have strong collinearity, just to see how the model with too many variables that are collinear would perform. 
+
 ## model with physical attributes of the housing
 reg1 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
                   dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, elevator, dock, BeachView, pool, luxury, singlefamily, estates))
@@ -849,7 +852,7 @@ reg2 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>%
                   dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, 
                                 parks_nn1, MedRent, MedHHInc, pctBlackorHis, pctBachelors, pool, 
                                 pctOwnerHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
-                                pctPoverty, Halfmile_metro, CoastDist, pctHH200kOrMore, elevator, dock, luxuary, BeachView))
+                                pctPoverty, Halfmile_metro, CoastDist, pctHH200kOrMore, elevator, dock, luxury, BeachView))
 
 ## include almost all variables
 reg3 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
@@ -860,29 +863,40 @@ reg3 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>%
 summary(reg1)
 ## trimmed/ cleaned up model from the inital model
 #singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist, pctHH200kOrMore, luxury, elevator, dock, BeachView, estates)
+                               # singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist, pctHH200kOrMore, luxury, elevator, dock, BeachView, estates))
+```
 
 
+After our initial exploratory models, we used the **stepwise backward method** to find the statistically best model. The **stepwise backward function** drops each individual variable at a time to find a model with the least **AIC (Akaike information criterion)** which estimates the quality of each model relative to other models. the output of this process, **reg4** was the model with the smallest AIC value, indicating this output is the statistically best model. 
+
+```{r}
 ##stepwise backward function
 step( lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
            dplyr::select(SalePrice, LotSize, Bed, Bath, Age, 
                          ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
                          singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
                          pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist,pctHH200kOrMore, luxury, elevator, dock, estates)), direction="backward")
-##output
+```
+
+```{r, include =TRUE}
 reg4 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
                            dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis , pctBachelors, pool, singlefamily, pctOwnerHH, 
                                          pctNoMortgage,  pctCarCommute, pctHH200kOrMore , luxury, elevator, dock , estates))
+```
 
+The variables with crime factors were not part of the output from the stepwise backward function. However, we made a judgment that crime (proximity or density of sexual offenders as a proxy) is important factor in the predicting the price of a home. So we decided to try adding **"crime_5"**, which indicates the average distances of the 5 nearest sexual offenders, and **"sexualoffenders_Buffer"**, which indicates the number of sexual offenders in a half mile buffer of a home.
+
+```{r, include =TRUE}
 # add crim_nn5 to reg5
 reg5 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
                     dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedRent, MedHHInc, pctBlackorHis, pctBachelors, pool, 
                                   singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, luxury, elevator, dock, crime_nn5, BeachView, estates))
-summary(reg4)
 #add crime buffer to reg5
 reg6 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
              dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedHHInc, pctHis, pctBachelors, pool, 
                             singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, luxury, elevator, dock, sexualoffenders_Buffer, estates))
 ```
+
 ```{r, echo = TRUE, warning = FALSE, results = "asis"}
 stargazer(reg1, reg2, reg3, reg4, reg5, reg6, type = "html")
 ```
