@@ -145,7 +145,7 @@ MiamiProperties_original <-
 st_crs(MiamiProperties) #note that I'm keeping this in the default WGS84 until I finish the CoastDist calculations
 mapview::mapview(MiamiProperties)
 
-MiamiProperties<-
+MiamiProperties1<-
   #st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")%>%
   st_read("/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson") %>%
   
@@ -163,7 +163,7 @@ MiamiProperties<-
                 -City.Senior, -City.LongTermSenior, -City.Other.Exempt, -Legal1, -Legal2, -Legal3, -Legal4, -Legal5, -Legal6, -XF1, -XF2, -XF3,
                 -WVDB, -HEX, -GPAR, -County.2nd.HEX, -City.2nd.HEX, -MillCode, -Zoning, -Land.Use)
 
-st_crs(MiamiProperties)
+st_crs(MiamiProperties1)
 mapview::mapview(MiamiProperties)
 
 ## Calculate the distance to Coastline (this calculation has to be in WGS84)
@@ -172,22 +172,24 @@ Coastline<-opq(bbox = c(xmin, ymin, xmax, ymax)) %>%
   osmdata_sf()
 
 ### add to MiamiProperties and convert to miles
-MiamiProperties <-
-  MiamiProperties %>%
-  mutate(CoastDist=(geosphere::dist2Line(p=st_coordinates(st_centroid(MiamiProperties)),
+MiamiProperties1 <-
+  MiamiProperties1 %>%
+  mutate(CoastDist=(geosphere::dist2Line(p=st_coordinates(st_centroid(MiamiProperties1)),
                                         line=st_coordinates(Coastline$osm_lines)[,1:2])*0.00062137)[,1])
 
 hist(MiamiProperties$CoastDist)
 
-
+MiamiProperties <- MiamiProperties1
 ##Convert Miami Data to Local Projection #st_transform('ESRI:102658')
 MiamiProperties <-
   MiamiProperties%>%
   st_transform('ESRI:102658')
 
-MiamiProperties<-
-  MiamiProperties%>%
+MiamiProperties <-
+  MiamiProperties %>%
   mutate(milecoast=ifelse(CoastDist<1,"Yes","No"))
+
+
 
 ## Add Data on Bars, pubs, and restaurants
 bars <- opq(bbox = c(xmin, ymin, xmax, ymax)) %>% 
@@ -317,20 +319,17 @@ MiamiProperties<-
     metro_nn1= nn_function(st_coordinates(st_centroid(MiamiProperties)),st_coordinates(metro_stops),1),
     Halfmile_metro=ifelse(metro_nn1<2640,"Halfmile_metro","Non_Halfmile_metro"))
 
-#Add Elementary School Name to Each Property
-elementary.school.clean<-
-  elementary.school.boundaries%>%
-  dplyr::select(NAME)%>%
-  rename(elem_name=NAME)
+### nn for parks 
 
-MiamiProperties<-
-  MiamiProperties%>%
-  st_join(elementary.school.clean)
+MiamiProperties$parks.Buffer =
+  st_buffer(MiamiProperties, 660) %>%
+  aggregate(mutate(dplyr::select(Parks), counter = 1),., sum) %>%
+  pull(counter)
 
-#Add neighborhood name to each property
-MiamiProperties<-
-  MiamiProperties%>%
-  st_join(all_nhoods)
+MiamiProperties <- MiamiProperties %>%
+  mutate(parks.Buffer = replace_na(parks.Buffer, 0))
+
+
 
 ## Load in census data
 
@@ -415,19 +414,25 @@ tracts18 <-
 
 
 #merge the data into the MiamiProperties dataframe
-MiamiProperties <-st_join(MiamiProperties,tracts18, left = TRUE)
+MiamiProperties <-s_join(MiamiProperties,tracts18)
 
+MiamiProperties_test <- MiamiProperties
+MiamiProperties_test <- MiamiProperties_test[!duplicated(MiamiProperties_test), ]
 
+#Add Elementary School Name to Each Property
+elementary.school.clean<-
+  elementary.school.boundaries%>%
+  dplyr::select(NAME)%>%
+  rename(elem_name=NAME)
 
-### nn for parks 
+MiamiProperties<-
+  MiamiProperties%>%
+  st_join(elementary.school.clean, left = TRUE)
 
-MiamiProperties$parks.Buffer =
-  st_buffer(MiamiProperties, 660) %>%
-  aggregate(mutate(dplyr::select(Parks), counter = 1),., sum) %>%
-  pull(counter)
-
-MiamiProperties <- MiamiProperties %>%
-  mutate(parks.Buffer = replace_na(parks.Buffer, 0))
+#Add neighborhood name to each property
+MiamiProperties<-
+  MiamiProperties%>%
+  st_join(all_nhoods, left = TRUE)
 
 ##### EXPLORE VARIABLES #####
 #Selecting between multiple nn variables:
@@ -1093,8 +1098,7 @@ st_join(threeRegressions, tracts18) %>%
 MiamiPropertiesAll <- MiamiProperties %>% distinct(geometry, .keep_all = TRUE)
 
 ##### PREDICTION #####
-secret_data <- filter(MiamiProperties, toPredict == 1)%>% 
-              distinct(geometry, .keep_all = TRUE)
+secret_data <- filter(MiamiProperties_test, toPredict == 1)
 
 secret_preds <- ifelse((predict(reg5, newdata = secret_data)) <0, mean(Miami.training$SalePrice), predict(reg5, newdata = secret_data))
 
