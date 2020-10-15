@@ -115,6 +115,30 @@ OUTLINE - I did some rearranging of this to make it fit more closely with the de
 - how to get slope of the scatter plots
 - after applying neighborhood/school zone, should we test errors again?
 
+```{r initial, include=FALSE, message=FALSE, warning=FALSE}
+
+library(tidyverse)
+library(sf)
+library(spdep)
+library(caret)
+library(ckanr)
+library(FNN)
+library(grid)
+library(gridExtra)
+library(ggcorrplot)
+library(jtools)
+library(mapview)
+library(ggstance)
+library(broom.mixed)
+library(osmdata)
+library(geosphere)
+library(tidycensus)
+library(stargazer)
+library(kableExtra)
+
+options(scipen=999)
+options(tigris_class = "sf")
+```
 
 # 1. Introduction
 
@@ -122,13 +146,56 @@ Zillow’s housing market predictions, known as Zestimates, are valued for their
 
 ## Modeling Strategy
 
-To predict housing prices in the Miami area, we train a model using home prices from recent sales. Our model includes “features,” which are variables that are used to predict outcomes (in this case, home price). We use a hedonic model, which breaks home price into components that explain the cost: physical characteristics (e.g., living area), public services and amenities (e.g., distance parks), and the spatial process of prices (e.g., prices for homes within neighborhoods cluster together). Our process uses data wrangling, exploratory analysis, feature engineering, feature selection, and model estimate and validation to produce a hedonic model that effectively predicts home prices for Miami and Miami Beach. Key challenges inherent to this process involve identifying and cleaning publicly available data for inclusion, investigating underlying spatial processes and trends, and selecting an effective set of features for inclusion in the model while avoiding choosing variables that are too closely correlated with each other. 
+To predict housing prices in the Miami area, we train a model using home prices from recent sales. Our model includes “features,” which are variables that are used to predict outcomes (in this case, home price). We use a hedonic model, which breaks home price into components that explain the cost: physical characteristics (e.g., living area), public services and amenities (e.g., distance to parks), and the spatial process of prices (e.g., prices for homes within neighborhoods cluster together). Our process uses data wrangling, exploratory analysis, feature engineering, feature selection, and model estimate and validation to produce a hedonic model that effectively predicts home prices for Miami and Miami Beach. Key challenges inherent to this process involve identifying and cleaning publicly available data for inclusion, investigating underlying spatial processes and trends, and selecting an effective set of features for inclusion in the model while avoiding choosing variables that are too closely correlated with each other. 
 
 ## Results
-Our results show…
-Summary of the features included in our final model.
-MAPE of percent and dollar amount for the final model
-Would we recommend using this?
+Our final model for predicting home prices includes the 20 independent variables shown in Table 1. MAPE of percent and dollar amount for the final model. Would we recommend using this? Some text about how this model performs when we remove homes over 1 million.
+
+```{r variables, message=FALSE, warning=FALSE}
+finalvars<- c('Lot Size', 'Number of Bedrooms', 'Number of Bathrooms', 'Home Age', 'Home Size', 'Presence of a Pool', 'Whether the Property is a Single Family Home', 'Presence of Luxury Features', 'Presence of an Elevator', 'Presence of a Dock', 'Estate Zoning', 'Number of Sexual Offenders or Predators within an Eighth Mile of the Home', 'Distance to the Nearest Park', 'Within 0.5 miles of a Metro Stop', 'Median Household Income', 'Percent of Population that is Hispanic', 'Percent of Population with a Bachelors Degree', 'Percent of Households that are Owned', 'Percent of Population that Commutes via Car', 'Percent of Households with a Household Income of $200,000 or more')
+
+vartype<-c('Internal Characteristic', 'Internal Characteristic','Internal Characteristic','Internal Characteristic','Internal Characteristic','Internal Characteristic','Internal Characteristic','Internal Characteristic','Internal Characteristic','Internal Characteristic','Internal Characteristic', 'Amenities/Public Services', 'Amenities/Public Services', 'Amenities/Public Services', 'Spatial Structure', 'Spatial Structure', 'Spatial Structure', 'Spatial Structure', 'Spatial Structure', 'Spatial Structure')
+
+datasource<-c('Home Data', 'Home Data', 'Home Data', 'Home Data', 'Home Data', 'Home Data', 'Home Data', 'Home Data', 'Home Data', 'Home Data', 'Home Data', 'Miami Dade County Open Data', 'OpenStreetMap', 'Miami Dade County Open Data', 'U.S. Census Bureau American Community Survey', 'U.S. Census Bureau American Community Survey', 'U.S. Census Bureau American Community Survey', 'U.S. Census Bureau American Community Survey', 'U.S. Census Bureau American Community Survey', 'U.S. Census Bureau American Community Survey')
+
+varsdesc<- c(
+  'Total Lot Size in Square Feet',
+  'Total Number of Bedrooms in the Home',
+  'Total Number of Bathrooms in the Home',
+  'Age of the Home, as of 2020',
+  'Total Size of the Home in Square Feet',
+  'Whether or Not the Property Includes a Pool',
+  'Whether the Property is a Single-Family Home or a Multi-Family Home',
+  'Whether the Home Contains any Luxury Features',
+  'Whether the Home Contains an Elevator',
+  'Whether the Home Contains a Dock',
+  'Whether the Home is Zoned as an Estate',
+  'The Number of Sexual Offenders and Predators within an Eighth of a Mile of the Home',
+  'Distance (in feet) to the nearest Park',
+  'Whether the Home is Within a Half-Mile of a MetroMover or MetroRail Stop',
+  'Median Household Income in the Census Tract',
+  'Percent of Population in the Census Tract that is Hispanic',
+  'Percent of Population in the Census Tract with a Bachelors Degree',
+  'Percent of Households in the Census Tract that are Owned',
+  'Percent of Population in the Census Tract that Commutes via Car',
+  'Percent of Households in the Census Tract with a Household Income of $200,000 or more')
+
+varstable<- data.frame(finalvars, datasource, varsdesc)
+
+varstable%>%
+  rename(Final_Variables = finalvars,
+         #Variable_Type = vartype,
+         Data_Source = datasource,
+         Variable_Description = varsdesc)%>%
+  kable(caption="Table 1. Final Independent Variables Included in Home Price Prediction Model")%>%
+  pack_rows("Internal Characteristic", 1, 11, label_row_css = "background-color: #25CB10") %>%
+  pack_rows("Amenities/Public Services", 12,14, label_row_css = "background-color: #faf500")%>%
+  pack_rows("Spatial Structure", 15, 20, label_row_css = "background-color: #FA7800")%>%
+  kable_styling("striped", full_width = F)%>%
+  scroll_box(height = "250px")
+  
+```
+
 
 ## Setup Code
 To begin the analysis, this section loads libraries and options, specifies styling options for maps and plots, creates quantile break functions and quantile styling, and loads color palettes. This section also creates the "nearest neighbor" function, which calculates the average nearest neighbor distance from each home to its k nearest objects of interest. This calculation is useful for creating features that describe the relative amount of an amenity around each home. For example, the nearest neighbor function can tell us the average distance from each home to the closest 1, 2, 3, 4, or 5 parks, bars, and crime events. In our exploratory analysis, we determine which nearest neighbor features are most appropriate for inclusion in the model.
@@ -155,6 +222,8 @@ library(broom.mixed)
 library(osmdata)
 library(geosphere)
 library(tidycensus)
+library(stargazer)
+library(kableExtra)
 
 options(scipen=999)
 options(tigris_class = "sf")
@@ -249,7 +318,7 @@ We accessed data for the analysis via the Miami-Dade County Open Data Hub API an
 
 **Loading Basemap**
 
-```{r Basemap, message=FALSE, warning=FALSE}
+```{r Basemap, message=FALSE, warning=FALSE, results='hide'}
 # Loading Miami base map from OSM Data
 miami.base <- 
   st_read("https://opendata.arcgis.com/datasets/5ece0745e24b4617a49f2e098df8117f_0.geojson") %>%
@@ -264,16 +333,20 @@ ymax = st_bbox(miami.base)[[4]]
 
 **Loading Home Data (Provided) and Neighborhood Data**
 
-```{r Load Data, message=FALSE, warning=FALSE, results=FALSE}
+```{r Load Data, message=FALSE, warning=FALSE, results=FALSE, results='hide'}
 MiamiProperties<-
   st_read("C:/Users/wagne/Documents/GitHub/ParkWagner_MidtermMUSA508/studentsData.geojson")%>%
   #st_read("/Users/davidseungleepark/Library/Mobile Documents/com~apple~CloudDocs/Fall 2020/cpln592/ParkWagner_MidtermMUSA508/studentsData.geojson") %>%
   
   mutate(pool = ifelse(str_detect((XF1), "Pool") | str_detect((XF2), "Pool") | str_detect((XF3), "Pool"), "Pool", "No Pool")) %>% 
   mutate(singlefamily = ifelse(str_detect(Zoning, "SINGLE FAMILY"), "Yes", "No")) %>%
+  mutate(estates = ifelse(str_detect(Zoning, "ESTATES"), "Yes", "No")) %>%
+  mutate(dock = ifelse(str_detect((XF1), "Dock") | str_detect((XF2), "Dock") | str_detect((XF3), "Dock"), "Dock", "No Dock")) %>%
   mutate(Age = (2020 - EffectiveYearBuilt),0) %>%
   mutate(luxury=ifelse(str_detect((XF1), "Luxury") | str_detect((XF2), "Luxury") | str_detect((XF3), "Luxury"), "Yes", "No")) %>%
   mutate(elevator=ifelse(str_detect((XF1), "Elevator") | str_detect((XF2), "Elevator") | str_detect((XF3), "Elevator"), "Yes", "No")) %>%
+  mutate(Gazebo=ifelse(str_detect((XF1), "Gazebo") | str_detect((XF2), "Gazebo") | str_detect((XF3), "Gazebo"), "Yes", "No")) %>%
+  mutate(BeachView=ifelse(str_detect((Legal1), "BEACH VIEW") | str_detect((Legal2), "BEACH VIEW") | str_detect((Legal3), "BEACH VIEW"), "Yes", "No")) %>%
   dplyr::select(-Land, -Year,-Bldg, -Total, -Assessed,  -saleDate, -saleType, -saleQual, -County.Senior, -County.LongTermSenior, -County.Other.Exempt, -Owner1, -Owner2, 
                 -Mailing.Address, -Mailing.City, -Mailing.State, -Mailing.Zip, -Mailing.Country, -YearBuilt,
                 -City.Senior, -City.LongTermSenior, -City.Other.Exempt, -Legal1, -Legal2, -Legal3, -Legal4, -Legal5, -Legal6, -XF1, -XF2, -XF3,
@@ -328,7 +401,7 @@ all_nhoods_MB<-
 
 **Calculating Distance to Coastline; Caculating proximity to Bars, Pubs, and Restaurants; Sexual Offenses; Parks; and Public Transportation**
 
-```{r Feature Engineering, message=FALSE, warning=FALSE, cache=TRUE}
+```{r Feature Engineering, message=FALSE, warning=FALSE, cache=TRUE, results='hide'}
 ## Calculate the distance to Coastline (this calculation has to be in WGS84)
 Coastline<-opq(bbox = c(xmin, ymin, xmax, ymax)) %>% 
   add_osm_feature("natural", "coastline") %>%
@@ -450,7 +523,7 @@ MiamiProperties<-
 
 **Adding Neighborhood and Elementary School Names to Each Home**
 
-```{r Neighborhood, message=FALSE, warning=FALSE}
+```{r Neighborhood, message=FALSE, warning=FALSE, results='hide'}
 #Add Elementary School Name to Each Property
 elementary.school.clean<-
   elementary.school.boundaries%>%
@@ -474,7 +547,7 @@ MiamiProperties<-
 
 **Loading Census Data**
 
-```{r Census data,message=FALSE, warning=FALSE, cache=TRUE}
+```{r Census data,message=FALSE, warning=FALSE, cache=TRUE, results='hide'}
 ## Load in census data
 census_api_key("41e1c0d912341017fa6f36a5da061d3b23de335e", overwrite = TRUE)
 
@@ -558,7 +631,7 @@ MiamiProperties <-st_join(MiamiProperties,tracts18)
 
 **Completing Feature Engineering and Filtering Out Homes Where Sales Prices Have Been Removed**
 
-```{r remove toPredict, message=FALSE, warning=FALSE}
+```{r remove toPredict, message=FALSE, warning=FALSE, results='hide'}
 MiamiPropertiesAll<-MiamiProperties
 
 #filter out the houses that we will need to predict
@@ -567,10 +640,10 @@ MiamiProperties<-
   filter(toPredict == 0)
 ```
 
-### Variables:
+### Variables
 Present a table of summary statistics with variable descriptions. Sort these variables by their category (internal characteristics, amenities/public services or spatial structure). Check out the `stargazer` package for this.
 
-## Correlation:
+## Correlation
 As part of the exploratory analysis, we examined correlation to assist in identifying features that may be useful for predicting sales price. A correlation matrix helps us visualize correlation across numeric variables. In the figures, the darker colors imply stronger correlation. These plot helps to determine features that are correlated to sale prices (see sale prices row) and variables that are correlated with each other. Figure 1 depicts a correlation plot of variables derived from the U.S. Census Bureau. Figure 2 depicts the correlation between the numeric features included in the final model. We developed several correlation matrices with additional variables in order to help determine features to include in the final model.
 
 ```{r Correlation Matrix, message=FALSE, warning=FALSE}
@@ -590,8 +663,9 @@ ggcorrplot(
 
 #Correlation of Variables Included in Model
 reg_final_vars <- 
-  select(st_drop_geometry(MiamiProperties), SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedHHInc, pctWhite, pctBachelors, 
-         pctOwnerHH, pctCarCommute, pctOwnerSince2010, crime_nn5) %>% na.omit()
+  select(st_drop_geometry(MiamiProperties), SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedHHInc, pctHis, pctBachelors, pool, 
+                            singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, luxury, elevator, dock,
+         sexualoffenders_Buffer, estates) %>% na.omit()
 
 ggcorrplot(
   round(cor(reg_final_vars), 1), 
@@ -617,7 +691,8 @@ st_drop_geometry(MiamiProperties) %>%
   facet_wrap(~Variable, ncol = 3, scales = "free") +
   labs(title = "Correlation between Sale Price and Crime Features",
        caption="Figure 3. Correlation Scatterplot Depicting the Relationship Between Sale Price and Crime Features") +
-  plotTheme()
+  plotTheme()+
+  theme(strip.text.x = element_text(size = 10))
 
 
 #Correlation Scatterplots for Variables of Interest
@@ -631,14 +706,15 @@ st_drop_geometry(MiamiProperties) %>%
   facet_wrap(~Variable, ncol = 3, scales = "free") +
   labs(title = "Price as a Function of Continuous Variables",
        caption="Figure 4. Correlation between Selected Continuous Variables and Sale Price") +
-  plotTheme()
+  plotTheme()+
+  theme(strip.text.x = element_text(size = 10))
 ```
 
 Some of the features included in the analysis are categorical rather than numeric (see Figure 5). Instead of using slope to calculate correlation, we evaluate the difference in mean price across each category. Differences in mean sales prices across categories suggest that the variable may be a good predictor of Sale Prices. 
 
 ```{r Categorical variable charts, message=FALSE, warning=FALSE}
 st_drop_geometry(MiamiProperties) %>%
-  dplyr::select(SalePrice, Halfmile_metro, Stories, pool, singlefamily, elevator, luxury)%>%
+  dplyr::select(SalePrice, pool, elevator, dock)%>%
   gather(Variable,Value, -SalePrice)%>%
   ggplot(aes(Value, SalePrice))+
   geom_bar(position="dodge",stat="summary", fun.y="mean")+
@@ -685,6 +761,7 @@ ggplot() + geom_sf(data = all_nhoods_MB, fill = "grey40") +
        caption="Figure 7. Density of Sexual Offenders in Miami and Miami Beach") +
   mapTheme()
 
+
 #Parks
 Parks_map<-
   Parks%>%
@@ -725,13 +802,13 @@ ggplot()+
 ## Model Building
 
 # 4. Model Building
-```{r}
+```{r Models, message=FALSE, warning=FALSE}
 reg1 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
                   dplyr::select(SalePrice, LotSize, Bed, Bath, Age, 
                                 ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
-                                singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
-                                pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist, pctHH200kOrMore))
-summary(reg_initial)
+                                singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, 
+                                pctPubCommute, pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist, pctHH200kOrMore))
+summary(reg1)
 ## trimmed/ cleaned up model from the inital model
 
 ##stepwise backward function
