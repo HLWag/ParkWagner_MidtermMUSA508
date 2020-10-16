@@ -135,8 +135,11 @@ library(geosphere)
 library(tidycensus)
 library(stargazer)
 library(kableExtra)
+library(pander)
+library(knitr)
+library(xtable)
 
-options(scipen=999)
+#options(scipen=999)
 options(tigris_class = "sf")
 ```
 
@@ -848,10 +851,15 @@ ggplot()+
 
 # 4. Model Building
 After exploring and testing correlations of all the variables, we have started our model building process by looking at only at physical attributes of the housing units **(reg1)**. Then we added additional engineered variables to see how the model performs **(reg2)**. In **reg3**, we included almost all variables, even the ones we have determined to have strong collinearity, just to see how the model with too many variables that are collinear would perform. 
-```{r Models, message=FALSE, warning=FALSE}
+
+
+```{r Models, include= TRUE}
 ## model with physical attributes of the housing
 reg1 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
                   dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, elevator, dock, BeachView, pool, luxury, singlefamily, estates))
+summary(reg1) %>%
+xtable() %>%
+kable()
 
 ## add addtional engineered variables
 reg2 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
@@ -859,6 +867,7 @@ reg2 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>%
                                 parks_nn1, MedRent, MedHHInc, pctBlackorHis, pctBachelors, pool, 
                                 pctOwnerHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, pctPubCommute, 
                                 pctPoverty, Halfmile_metro, CoastDist, pctHH200kOrMore, elevator, dock, luxury, BeachView))
+summary(reg2)
 
 ## include almost all variables
 reg3 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
@@ -866,12 +875,12 @@ reg3 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>%
                                 ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis, pctBlackorHis, pctBachelors, pool, 
                                 singlefamily, pctOwnerHH, pctRenterHH, crime_nn5, milecoast, pctNoMortgage, pctOwnerSince2010, pctCarCommute, 
                                 pctPubCommute, pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist, pctHH200kOrMore))
-summary(reg1)
+summary(reg3)
 ```
 
 After our initial exploratory models, we used the **stepwise backward method** to find the statistically best model. The **stepwise backward function** drops each individual variable at a time to find a model with the least **AIC (Akaike information criterion)** which estimates the quality of each model relative to other models. the output of this process, **reg4** was the model with the smallest AIC value, indicating this output is the statistically best model. 
 
-```{r}
+```{r, echo = FALSE}
 ##stepwise backward function
 step( lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
            dplyr::select(SalePrice, LotSize, Bed, Bath, Age, 
@@ -880,7 +889,7 @@ step( lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>%
                          pctPoverty, Halfmile_metro, metro_nn1, sexualoffenders_Buffer, milecoast, CoastDist,pctHH200kOrMore, luxury, elevator, dock, estates)), direction="backward")
 ```
 
-```{r, include =TRUE}
+```{r, include =TRUE, echo = FALSE}
 reg4 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
                            dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedRent, MedHHInc, pctWhite, pctBlack, pctHis , pctBachelors, pool, singlefamily, pctOwnerHH, 
                                          pctNoMortgage,  pctCarCommute, pctHH200kOrMore , luxury, elevator, dock , estates))
@@ -888,20 +897,31 @@ reg4 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>%
 
 The variables with crime factors were not part of the output from the stepwise backward function. However, we made a judgment call that crime (proximity or density of sexual offenders as a proxy) is important factor in the predicting the price of a home. So we decided to try adding **"crime_nn5"**, which indicates the average distances of the 5 nearest sexual offenders, and **"sexualoffenders_Buffer"**, which indicates the number of sexual offenders in a half mile buffer of a home.
 
-```{r, include =TRUE}
-# add crim_nn5 to reg5
+```{r, include =TRUE, echo = FALSE}
+# reg5: add crim_nn5
 reg5 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
                     dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedRent, MedHHInc, pctBlackorHis, pctBachelors, pool, 
                                   singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, luxury, elevator, dock, crime_nn5, BeachView, estates))
-#add crime buffer to reg5
+# reg6: add crime buffer
 reg6 <- lm(SalePrice ~ ., data = st_drop_geometry(MiamiProperties) %>% 
              dplyr::select(SalePrice, LotSize, Bed, Bath, Age, ActualSqFt, parks_nn1, MedHHInc, pctHis, pctBachelors, pool, 
                             singlefamily, pctOwnerHH, pctCarCommute, pctHH200kOrMore, Halfmile_metro, luxury, elevator, dock, sexualoffenders_Buffer, estates))
 ```
 
-```{r, echo = TRUE, warning = FALSE, results = 'asis'}
+```{r, echo = FALSE, warning = FALSE, results = 'asis'}
 stargazer(reg1, reg2, reg3, reg4, reg5, reg6, type = "html")
 ```
+
+Comparing the models we have created in the table above, we have decided that **reg6**, despite having a marginally smaller p-value, has the variables that we believe are critical for price prediction. 
+
+
+### Final Model
+```{r, final_modelm, echo=FALSE}
+pander(reg6)
+```
+
+
+
 
 # 4. Results
 -Split the ‘toPredict’ == 0 into a separate training and test set.
