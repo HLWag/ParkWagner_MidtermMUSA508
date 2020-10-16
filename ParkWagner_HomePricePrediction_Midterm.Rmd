@@ -904,8 +904,23 @@ stargazer(reg1, reg2, reg3, reg4, reg5, reg6, type = "html")
 ```
 
 # 4. Results
+<<<<<<< Updated upstream
 
 To test our selected model, we randomly divided our master dataset, MiamiProperties, into separate training (60%) and test (40%) sets. Table 2 shows the results of running our model on our training set.
+=======
+-Split the ‘toPredict’ == 0 into a separate training and test set.
+-Provide a polished table of your (training set) lm summary results (coefficients, R2 etc).
+-Provide a polished table of mean absolute error and MAPE for a single test set. Check out the “kable” function for markdown to create nice tables.
+-Provide the results of your cross-validation tests. This includes mean and standard deviation MAE. Do 100 folds and plot your cross-validation MAE as a histogram. Is your model generalizable to new data?
+-Plot predicted prices as a function of observed prices
+-Provide a map of your residuals for your test set. Include a Moran’s I test and a plot of the spatial lag in errors. 5
+-Provide a map of your predicted values for where ‘toPredict’ is both 0 and 1.
+-Using the test set predictions, provide a map of mean absolute percentage error (MAPE) by neighborhood. 
+-Provide a scatterplot plot of MAPE by neighborhood as a function of mean price by neighborhood. 
+-Using tidycensus, split your city in to two groups (perhaps by race or income) and test your model’s generalizability. Is your model generalizable?
+
+To test our selected model, we randomly divided our master dataset, MiamiProperties, into separate training (60%) and test (40%) sets. Table 2 shows the results of model 
+>>>>>>> Stashed changes
 
 ```{r Training & Test Sets, message=FALSE, warning=FALSE, results='asis'}
 # set random seed
@@ -988,7 +1003,7 @@ ggplot(preds, aes(x = actual, y = pred)) +
   theme()
 ```
 
-Table X summarized the mean absolute error and the mean absolute percentage error for our test set. This tells us that...
+Table X summarizes the mean absolute error and the mean absolute percentage error for our test set. This tells us that...
 
 ```{r MAE and MAPE for single test set, message=FALSE, warning=FALSE}
 
@@ -1018,6 +1033,17 @@ reg.cv$resample %>%
   theme(
     legend.position = "none"
   )
+
+reg.cv.dataframe<-
+reg.cv$resample %>% 
+  dplyr::select(MAE) %>%
+  data.frame()
+
+hist(reg.cv.dataframe$MAE, 
+  main="Distribution of Mean Average Error from 100 Fold Test",
+  xlab="Mean Average Error",
+  ylab="Frequency")
+
 
 # extract predictions from CV object
 cv_preds <- reg.cv$pred
@@ -1244,6 +1270,7 @@ ggplot()+
   
 ```
 
+<<<<<<< Updated upstream
 Figure X shows the mean absolute percentage error by neighborhood. This map shoes that some neighborhoods have a higher mean absolute percentage error (depicted in orange) than the majority of the neighborhoods (in green).
 
 ```{r MAPE by Neighborhood, message=FALSE, warning=FALSE}
@@ -1452,6 +1479,8 @@ st_join(st_centroid(threeRegressions), tracts18) %>%
   spread(incomeContext, mean.MAPE) %>%
   kable(caption = "Test set MAPE by neighborhood income context")
 ```
+=======
+>>>>>>> Stashed changes
 
 # 5. Discussion 
 
